@@ -19,20 +19,42 @@ private:
     int writePos = 0;
 };
 
-// Waveform overview with playhead.
+// Scrolling waveform (a few seconds around the playhead, which stays in the
+// centre) above an overview of the whole sample, coloured in steps by the
+// amplitude.
 class WaveView : public juce::Component
 {
 public:
     void setSample (std::shared_ptr<const vt::SampleData> s);
     void setPlayhead (double seconds) { playhead = seconds; repaint(); }
+    void setLoop (bool l) { loop = l; }
     // Cue points in seconds (NaN = empty), drawn as markers over the waveform.
     void setCues (const std::array<double, VinylTracerProcessor::kNumCues>& c) { cues = c; }
     void paint (juce::Graphics&) override;
 
+    void setViewSeconds (double s) { viewSeconds = s; } // visible span of the scrolling view
+    void mouseDown (const juce::MouseEvent&) override;
+
+    std::function<void (double seconds)> onSeek; // click in the overview
+
 private:
-    std::vector<float> mins, maxs;
+    // upper 2/3: scrolling waveform, lower 1/3: overview of the whole sample
+    void layout (juce::Rectangle<float>& scroll, juce::Rectangle<float>& overview) const;
+    void paintScroll (juce::Graphics&, juce::Rectangle<float> area);
+    void paintOverview (juce::Graphics&, juce::Rectangle<float> area);
+    double wrapped (double t) const { return loop ? t - duration * std::floor (t / duration) : t; }
+
+    // min / max over both channels per kBinFrames frames of the sample
+    static constexpr int kBinFrames = 64;
+    std::vector<float> mins, maxs, meanSq;              // per bin
+    std::vector<float> ovMins, ovMaxs, ovRms;           // overview: one entry per pixel column (rebuilt on resize)
+    float ovRmsMax = 1.f;
+    double binSeconds = 0.0;
+    float  peak = 1.f;
     double duration = 0.0;
     double playhead = 0.0;
+    bool   loop = false;
+    double viewSeconds = 4.0;
     std::array<double, VinylTracerProcessor::kNumCues> cues {};
     juce::String name;
 };
@@ -71,6 +93,9 @@ private:
     juce::Label      timecodeLabel, modeLabel, rpmLabel, thresholdLabel, gainLabel;
     juce::Slider     thresholdSlider, gainSlider;
     juce::ToggleButton thruButton { "Timecode Thru" }, loopButton { "Loop" };
+    juce::Label      viewLabel;
+    juce::ComboBox   viewBox;   // visible span of the scrolling waveform
+    int              shownViewSeconds = 0; // the processor's value the box was last synced to
 
     using ComboAttachment  = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
     using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;

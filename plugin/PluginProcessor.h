@@ -8,6 +8,7 @@
 
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <memory>
 #include <vector>
 
@@ -55,6 +56,17 @@ public:
     void   recallCue (int index) noexcept;          // play from the cue (done on the audio thread)
     void   clearCue (int index) noexcept;
     double getCue (int index) const noexcept;
+    // Play from this position in the sample (seconds), done on the audio thread.
+    void   jumpTo (double seconds) noexcept { if (! std::isnan (seconds)) jumpRequest.store (seconds); }
+
+    // Visible span of the scrolling waveform (1, 2, 4, 6 or 8 s), stored with the state.
+    static constexpr int kWaveViewChoices[] { 1, 2, 4, 6, 8 };
+    int  getWaveViewSeconds() const noexcept { return waveViewSeconds.load(); }
+    void setWaveViewSeconds (int s) noexcept
+    {
+        for (int c : kWaveViewChoices)
+            if (c == s) { waveViewSeconds.store (s); return; }
+    }
 
     struct Status
     {
@@ -90,7 +102,8 @@ private:
     std::atomic<double> cueCycles { 0.0 };
     std::atomic<bool>   cueValid { false };
     std::array<std::atomic<double>, kNumCues> cuePoints;  // sample seconds, NaN = empty
-    std::atomic<int>    cueRecall { -1 };                // index to jump to, -1 = none
+    std::atomic<double> jumpRequest { std::nan ("") };   // sample seconds to jump to, NaN = none
+    std::atomic<int>    waveViewSeconds { 4 };
     std::atomic<int>    savedConfig { -1 };
     static constexpr float kNoNominal = -100.f;          // "no stored level"
     std::atomic<float>  savedNominalDb { kNoNominal };   // measured timecode level (dBFS)
