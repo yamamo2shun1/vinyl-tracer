@@ -3,3 +3,5 @@ JUCE/
 *.wav
 *.csv
 .DS_Store
+
+*.asd
