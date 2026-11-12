@@ -27,6 +27,26 @@ constexpr double kStaleSeconds = 0.03;  // carrier lost this long -> needle may 
 constexpr double kLoopBaseHz     = 300.0;
 constexpr double kLoopPerSpeedHz = 300.0;
 constexpr double kLoopMaxHz      = 2500.0;
+constexpr double kCoastMinSpeed  = 0.5;   // below this a lost carrier means "stopped"
+constexpr double kGateSeconds    = 0.0005; // averaging of the magnitude for closing the gate
+constexpr double kGateRmsSeconds = 0.005;  // RMS window for opening the gate
+constexpr double kRefLearnSeconds = 2.0;  // playback near 1x needed before the level is "learned"
+constexpr double kMaxSpeed       = 16.0;  // physical limit of a hand-driven record
+constexpr int    kAcqSamples     = 24;    // ~0.5 ms of angle steps for frequency acquisition
+constexpr double kAcqMinStep     = 0.01;  // turns/sample (~0.25x) - smaller offsets the loop pulls in itself
+constexpr double kLockLost       = 0.15;  // mean |residual| (turns) above which the loop follows noise
+constexpr double kLiftMinSpeed   = 0.3;   // carrier lost above this speed -> needle lifted
+constexpr double kWeightMaxSpeed = 0.1;     // magnitude weighting only below this (10 ms average speed)
+constexpr double kReversalWeightSpeed = 0.2; // ... and at the turn of a reversal (instantaneous speed)
+constexpr double kMaxSlipCycles  = 50.0;  // larger corrections are not tracker slips (relative mode)
+#ifndef VT_ROUGH_LOW
+#define VT_ROUGH_LOW 0.05
+#endif
+#ifndef VT_ROUGH_HIGH
+#define VT_ROUGH_HIGH 0.10
+#endif
+constexpr double kRoughLow       = VT_ROUGH_LOW;  // mean |residual| (turns): quality 1 up to here ...
+constexpr double kRoughHigh      = VT_ROUGH_HIGH; // ... falling to 0 here (clean carrier ~0.005)
 
 inline double onePole (double sr, double seconds) { return 1.0 - std::exp (-1.0 / (seconds * sr)); }
 
@@ -43,6 +63,12 @@ void TimecodeDecoder::prepare (double sampleRate)
     kDc_   = 1.0 - std::exp (-kTwoPi * 2.0 / sr_);
     kDcSlow_ = 1.0 - std::exp (-kTwoPi * 0.3 / sr_);
     kShort_  = onePole (sr_, 0.010);
+    kGateMag_ = onePole (sr_, kGateSeconds);
+    kGatePow_ = onePole (sr_, kGateRmsSeconds);
+    kLockErr_ = onePole (sr_, 0.002);
+    kSlowSpeed_ = onePole (sr_, 0.010);
+    refLearnNeeded_ = int (kRefLearnSeconds * sr_);
+    vMax_ = kMaxSpeed * 2.0 * 1000.0 / sr_; // doubled angle: 2 turns per carrier cycle (re-set in setTable)
     kNfFall_ = onePole (sr_, 0.030);
     nfRise_  = std::pow (10.0, 6.0 / 20.0 / sr_); // +6 dB per second
     kCal_  = onePole (sr_, 0.5);
@@ -58,6 +84,8 @@ void TimecodeDecoder::prepare (double sampleRate)
 void TimecodeDecoder::setTable (const LfsrTable* table)
 {
     table_ = table;
+    if (table_ != nullptr)
+        vMax_ = kMaxSpeed * 2.0 * table_->def().resolution / sr_;
     for (auto& h : hyp_) h = Hypothesis {};
     selected_ = -1;
     selectedBad_ = 0;
@@ -72,8 +100,11 @@ void TimecodeDecoder::reset()
     dcL_ = dcR_ = 0.0;
     eLL_ = eRR_ = 1e-9; eLR_ = 0.0;
     env_ = 0.0;
-    shortPow_ = 0.0; noiseFloor_ = 1e-7;
-    X_ = V_ = A_ = 0.0;
+    shortPow_ = 0.0; noiseFloor_ = 1e-7; gateMag_ = gatePow_ = 0.0;
+    X_ = V_ = A_ = lockErr_ = relShift_ = relCorr_ = relCorrTarget_ = 0.0;
+    slowSpeed_ = 0.0;
+    acqN_ = 0;
+    acqSum_ = acqSq_ = 0.0;
     gateOpen_ = false;
     posL_ = posR_ = false;
     for (auto& r : refLevel_) r[0] = r[1] = 1.f;
@@ -84,6 +115,15 @@ void TimecodeDecoder::reset()
 void TimecodeDecoder::setGateDb (float db) noexcept
 {
     gateLin_ = std::pow (10.0, double (db) / 20.0);
+}
+
+void TimecodeDecoder::setNominalDb (float db) noexcept
+{
+    if (db > -80.f && db < 6.f)
+    {
+        refAmp_ = std::pow (10.0, double (db) / 20.0);
+        refLearnSamples_ = refLearnNeeded_; // a stored measurement counts as learned
+    }
 }
 
 void TimecodeDecoder::setPreferredConfig (int cfg) noexcept
@@ -115,7 +155,7 @@ void TimecodeDecoder::updateLoopGains (double absSpeed) noexcept
 }
 
 void TimecodeDecoder::process (const float* left, const float* right, int numSamples,
-                               double* posAbs, double* posRel, float* speed) noexcept
+                               double* posAbs, double* posRel, float* speed, float* quality) noexcept
 {
     const double speedScale = (table_ != nullptr) ? sr_ * 0.5 / table_->def().resolution
                                                   : sr_ * 0.5 / 1000.0;
@@ -123,19 +163,26 @@ void TimecodeDecoder::process (const float* left, const float* right, int numSam
     {
         processSample (left[i], right[i]);
 
-        const double rel = double (dirSign_) * X_ * 0.5;
-        if (posRel != nullptr) posRel[i] = rel;
+        const double rel = double (dirSign_) * X_ * 0.5 + relShift_;
+        if (posRel != nullptr) posRel[i] = rel + relCorr_;
         if (posAbs != nullptr) posAbs[i] = anchored_ ? rel + offset_ : rel;
         if (speed  != nullptr) speed[i]  = float (double (dirSign_) * V_ * speedScale);
+        // Signal quality: while the input is not a clean carrier (stylus
+        // skating / skipping in hard scratches) the loop follows noise and the
+        // position shakes back and forth within a millisecond. The true motion
+        // is unknown there; the player turns the level down instead.
+        if (quality != nullptr)
+            quality[i] = float (1.0 - std::clamp ((lockErr_ - kRoughLow) / (kRoughHigh - kRoughLow), 0.0, 1.0));
     }
 
-    const double rel = double (dirSign_) * X_ * 0.5;
+    const double rel = double (dirSign_) * X_ * 0.5 + relShift_;
     status_.signal    = gateOpen_;
     status_.anchored  = anchored_;
     status_.absCycles = anchored_ ? rel + offset_ : rel;
     status_.speed     = double (dirSign_) * V_ * speedScale;
     status_.levelDb   = 20.f * std::log10 (std::max (peak_, 1e-6f));
     status_.refDb     = float (20.0 * std::log10 (std::max (refAmp_, 1e-6)));
+    status_.refLearned = refLearnSamples_ >= refLearnNeeded_;
     status_.config    = selected_;
     status_.reanchors = reanchors_;
     status_.validBits = selected_ >= 0 ? hyp_[selected_].valid : 0;
@@ -168,7 +215,13 @@ void TimecodeDecoder::processSample (float xl, float xr) noexcept
     noiseFloor_ = std::clamp (noiseFloor_, 1e-7, refAmp_ * kNfCap);
     const double openLevel  = std::max (refAmp_ * gateLin_, noiseFloor_ * kNfMargin);
     const double closeLevel = openLevel * 0.7;
-    gateOpen_ = gateOpen_ ? (rawMag > closeLevel) : (rawMag > openLevel);
+    // Open on the RMS over a few ms, not on the magnitude: noise / vibration
+    // peaks of a stopped record must not open the gate. Close on a short
+    // magnitude average (holding it open longer let vibration bursts and
+    // noise drive the loop in the synthetic tests).
+    gateMag_ += kGateMag_ * (rawMag - gateMag_);
+    gatePow_ += kGatePow_ * (rawMag * rawMag - gatePow_);
+    gateOpen_ = gateOpen_ ? (gateMag_ > closeLevel) : (std::sqrt (gatePow_) > openLevel);
 
     // 3. L/R calibration statistics. Only updated while the carrier is fast
     //    enough for the averaging window to span many cycles; slow partial
@@ -193,6 +246,7 @@ void TimecodeDecoder::processSample (float xl, float xr) noexcept
     status_.scopeL = float (l / std::max (refAmp_, 1e-6));
     status_.scopeR = float (r / std::max (refAmp_, 1e-6));
 
+
     // 4. Phase tracker on the doubled angle
     const double Xp = X_ + V_ + 0.5 * A_;
     const double Vp = V_ + A_;
@@ -201,25 +255,110 @@ void TimecodeDecoder::processSample (float xl, float xr) noexcept
         const double meas  = atan2Turns (2.0 * l * r, r * r - l * l); // 2*theta, turns
         double resid = meas - (Xp - std::floor (Xp));
         resid -= std::floor (resid + 0.5);                           // wrap to [-0.5, 0.5)
+        // Magnitude weighting, only while the record is (nearly) stopped. A
+        // knock on the desk swings the stylus through the origin on a thin
+        // ellipse, always the same way round; its angle turns mostly where
+        // the magnitude is small, so unweighted it reads as slow rotation and
+        // the position creeps a cycle per swing ("ratchet"). Weighting while
+        // moving made the loop lose cycles at every pull-back, so it stops
+        // above kWeightMaxSpeed (10 ms average speed - quick scratch reversals
+        // stay above it).
+        // (While moving, the angle still swings when a hard push drives the
+        // path close to the origin; the resulting position steps are removed
+        // by the acceleration limit in ScratchPlayer, not here.)
+        // ... and at the turning point of a reversal (instantaneous speed below
+        // kReversalWeightSpeed): the cartridge output collapses there, the path
+        // passes the origin and the angle swings (a 0.4-cycle jump and a click
+        // in the output). Limited to the instant of the turn, the loop does not
+        // lose cycles on pull-backs.
+        if (slowSpeed_ < kWeightMaxSpeed || std::abs (speedNow_) < kReversalWeightSpeed)
+        {
+            const double q = std::min (mag / std::max (env_, 1e-12), 1.0);
+            resid *= q * q;
+        }
+        // Lock detector: on a real carrier the residual stays small; on noise
+        // it is large and random. Without this the loop, whose bandwidth grows
+        // with speed, can run away on noise that keeps the gate open.
+        lockErr_ += kLockErr_ * (std::abs (resid) - lockErr_);
         X_ = Xp + loopA_ * resid;
         V_ = Vp + loopB_ * resid;
         A_ += loopC_ * resid;
+        if (lockErr_ > kLockLost)
+        {
+            V_ *= coast_; // following noise: let the speed die away
+            A_ = 0.0;
+        }
+
+        // Frequency acquisition right after the gate opens (needle drop, record
+        // starting under the needle): the loop alone cannot pull in from rest
+        // to a fast carrier and may settle on a false lock near zero speed.
+        // If the angle advanced steadily over the first samples, start the
+        // loop at that frequency. Noise (random steps) is left to the loop.
+        if (acqN_ < kAcqSamples)
+        {
+            if (acqN_ > 0)
+            {
+                double d = meas - acqLast_;
+                d -= std::floor (d + 0.5);
+                acqSum_ += d;
+                acqSq_  += d * d;
+            }
+            acqLast_ = meas;
+            if (++acqN_ == kAcqSamples)
+            {
+                const double n    = double (kAcqSamples - 1);
+                const double mean = acqSum_ / n;
+                const double sd   = std::sqrt (std::max (acqSq_ / n - mean * mean, 0.0));
+                if (sd < 0.25 * std::abs (mean) && std::abs (mean - V_) > kAcqMinStep)
+                {
+                    V_ = mean;
+                    A_ = 0.0;
+                }
+            }
+        }
+    }
+    else if (std::abs (speedNow_) < kCoastMinSpeed)
+    {
+        // No usable carrier at low speed: the record has stopped. Coasting on
+        // here would stretch a short vibration into a long movement.
+        V_ = 0.0;
+        A_ = 0.0;
     }
     else
     {
-        // No usable carrier: the record is (nearly) stopped or the needle is up.
+        // Short drop-out while the record is moving: keep going for a moment.
         X_ = X_ + V_;
         V_ *= coast_;
         A_ = 0.0;
     }
+    if (! gateOpen_)
+    {
+        acqN_ = 0;
+        acqSum_ = acqSq_ = 0.0;
+    }
+
+    // A turntable cannot go faster than this; without the limit, noise that
+    // keeps the gate open could drive the loop (whose bandwidth grows with
+    // speed) to ever higher speeds.
+    V_ = std::clamp (V_, -vMax_, vMax_);
 
     const double speedNow = (table_ != nullptr ? sr_ * 0.5 / table_->def().resolution : sr_ * 0.5 / 1000.0) * V_;
     speedNow_ = speedNow;
+    slowSpeed_ += kSlowSpeed_ * (std::abs (speedNow) - slowSpeed_); // a swing's brief spike stays small here
     updateLoopGains (std::abs (speedNow));
 
     // Needle-up detection and slewing of small anchor corrections
-    if (gateOpen_) closedSamples_ = 0;
-    else if (++closedSamples_ > int (kStaleSeconds * sr_) && anchored_) stale_ = true;
+    // The needle counts as lifted only if the carrier vanished while the
+    // record was moving. A record held still by the hand (between baby
+    // scratches) also loses the carrier, but after slowing down to ~0; the
+    // correction that follows is then a tracker slip, not a needle drop.
+    if (gateOpen_)
+    {
+        closedSamples_ = 0;
+        lastOpenSpeed_ = std::abs (speedNow);
+    }
+    else if (++closedSamples_ > int (kStaleSeconds * sr_) && anchored_ && lastOpenSpeed_ > kLiftMinSpeed)
+        stale_ = true;
 
     if (offset_ != offsetTarget_)
     {
@@ -227,10 +366,22 @@ void TimecodeDecoder::processSample (float xl, float xr) noexcept
         const double d    = offsetTarget_ - offset_;
         offset_ = (std::abs (d) <= step) ? offsetTarget_ : offset_ + (d > 0 ? step : -step);
     }
+    // Tracker slips also go into the relative position (slewed like the small
+    // absolute corrections), or they pile up in Relative mode and the cue
+    // point wanders when the record is pulled back over and over.
+    if (relCorr_ != relCorrTarget_)
+    {
+        const double step = kSlewPerSec / sr_;
+        const double d    = relCorrTarget_ - relCorr_;
+        relCorr_ = (std::abs (d) <= step) ? relCorrTarget_ : relCorr_ + (d > 0 ? step : -step);
+    }
 
     // Track the nominal carrier level while playing near normal speed
     if (gateOpen_ && std::abs (speedNow) > 0.8 && std::abs (speedNow) < 1.25)
+    {
         refAmp_ += kRef_ * (rawMag - refAmp_);
+        if (refLearnSamples_ < refLearnNeeded_) ++refLearnSamples_;
+    }
     else if (rawMag > refAmp_ * 2.0) // much louder input than expected: adapt quickly
         refAmp_ += kRef_ * 10.0 * (rawMag - refAmp_);
 
@@ -335,6 +486,9 @@ void TimecodeDecoder::onCrossing (int primary, float primaryValue) noexcept
                 if (selected_ < 0 || newDir != dirSign_)
                     anchored_ = false;
                 selected_ = idx;
+                // Keep the relative position continuous: flipping the sign
+                // would mirror it (a jump in Relative mode and a loud click).
+                relShift_ += double (dirSign_ - newDir) * X_ * 0.5;
                 dirSign_  = newDir;
             }
         }
@@ -345,7 +499,7 @@ void TimecodeDecoder::onCrossing (int primary, float primaryValue) noexcept
         // Absolute index of the bit just read
         const int32_t n = t.lookup (h.bits);
 
-        const double rel       = double (dirSign_) * X_ * 0.5;
+        const double rel       = double (dirSign_) * X_ * 0.5 + relShift_;
         const double offsetNew = double (n) - rel;
         const double diff      = offsetNew - offsetTarget_;
         const double absSpeed  = std::abs (speedNow_);
@@ -382,9 +536,14 @@ void TimecodeDecoder::onCrossing (int primary, float primaryValue) noexcept
 #ifdef VT_DEBUG
                     std::fprintf (stderr, "reanchor diff=%+.3f V=%+.4f dir=%d valid=%d\n", diff, V_, dir, h.valid);
 #endif
+                    // The needle stayed on the record, so this is a tracker
+                    // slip (however large): the relative position gets it
+                    // too, slewed. Needle drops are the stale_ branch above.
+                    if (std::abs (offsetNew - offsetTarget_) < kMaxSlipCycles)
+                        relCorrTarget_ += offsetNew - offsetTarget_;
                     offsetTarget_ = offsetNew;
                     if (std::abs (diff) > kJumpCycles)
-                        offset_ = offsetNew; // needle drop: jump
+                        offset_ = offsetNew; // large: jump the absolute position
                     mismatch_ = 0;
                     ++reanchors_;
                 }

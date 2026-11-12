@@ -1,5 +1,6 @@
 #include "Synth.h"
 
+#include <algorithm>
 #include <cmath>
 #include <complex>
 
@@ -66,6 +67,22 @@ void synthesize (const LfsrTable& table, const std::vector<double>& theta,
 
     Biquad riL = makeRiaa (opt.sampleRate), riR = riL;
 
+    // Hand offset: a few slow sinusoids per channel with random frequency and
+    // phase (separate generator so the other options keep their noise).
+    struct Slow { double f, ph; };
+    Slow slowL[4], slowR[4];
+    {
+        std::mt19937 r2 (opt.seed + 1);
+        std::uniform_real_distribution<double> U (0.0, 1.0);
+        for (int k = 0; k < 4; ++k)
+        {
+            slowL[k] = { 3.0 + 22.0 * U (r2), kTwoPi * U (r2) };
+            slowR[k] = { 3.0 + 22.0 * U (r2), kTwoPi * U (r2) };
+        }
+    }
+    double handGain = 0.0, handLastV = 0.0;                  // follows |acceleration|, 10 ms
+    const double kHand = 1.0 - std::exp (-1.0 / (0.010 * opt.sampleRate));
+
     const size_t N = theta.size();
     left.resize (N);
     right.resize (N);
@@ -105,6 +122,38 @@ void synthesize (const LfsrTable& table, const std::vector<double>& theta,
         const double t = double (i) / opt.sampleRate;
         l += opt.dcL + hum * std::sin (kTwoPi * 50.0 * t) + noise * gauss (rng);
         r += opt.dcR + hum * std::sin (kTwoPi * 50.0 * t + 0.3) + noise * gauss (rng);
+
+        if (opt.handOffset > 0.0)
+        {
+            const size_t i0 = i > 0 ? i - 1 : 0;
+            const size_t i1 = i + 1 < N ? i + 1 : N - 1;
+            double v = (theta[i1] - theta[i0]) / double (i1 - i0 == 0 ? 1 : i1 - i0)
+                     * opt.sampleRate / def.resolution;
+            if (std::abs (v) > 50.0) v = handLastV;
+            // the push of the hand ~ acceleration (full effect at 20x per second)
+            const double acc = std::abs (v - handLastV) * opt.sampleRate;
+            handLastV = v;
+            handGain += kHand * (std::min (acc / 20.0, 1.0) - handGain);
+            double ol = 0.0, orr = 0.0;
+            for (int k = 0; k < 4; ++k)
+            {
+                ol  += 0.5 * std::sin (kTwoPi * slowL[k].f * t + slowL[k].ph);
+                orr += 0.5 * std::sin (kTwoPi * slowR[k].f * t + slowR[k].ph);
+            }
+            l += opt.handOffset * opt.level * handGain * ol;
+            r += opt.handOffset * opt.level * handGain * orr;
+        }
+        if (opt.vibration > 0.0)
+        {
+            const double tb = std::fmod (t, 0.25);
+            if (tb < 0.03)
+            {
+                const double w = 0.5 - 0.5 * std::cos (kTwoPi * tb / 0.03);
+                // mostly vertical stylus motion: L and R in anti-phase
+                l += opt.vibration * opt.level * w * std::sin (kTwoPi * 40.0 * t);
+                r -= opt.vibration * opt.level * w * 0.8 * std::sin (kTwoPi * 40.0 * t + 0.2);
+            }
+        }
 
         if (opt.invertR) r = -r;
         if (opt.swapLR) std::swap (l, r);
