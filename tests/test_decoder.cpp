@@ -31,6 +31,7 @@ struct Result
     double maxMs     = 0;    // max |error - median|
     double driftMs   = 0;    // median error over the last 5 s minus first 5 s
     double stuckPct  = 0;    // % of 10 ms windows where the record moved but output did not follow
+    double clickMs   = 0;    // max |second difference of the error| per sample (a step in the output = click)
     double nsPerSample = 0;
     int    reanchors = 0;
     int    config    = -1;
@@ -101,6 +102,9 @@ Result run (const LfsrTable& table, const std::vector<double>& theta, const Synt
     if (err.empty()) return r;
 
     r.offsetMs = median (err);
+    for (size_t k = 2; k < err.size(); ++k)
+        if (idx[k] == idx[k - 2] + 2)
+            r.clickMs = std::max (r.clickMs, std::abs (err[k] - 2.0 * err[k - 1] + err[k - 2]));
     std::vector<double> dev (err.size());
     for (size_t k = 0; k < err.size(); ++k) dev[k] = err[k] - r.offsetMs;
     r.p99Ms = percentileAbs (dev, 0.99);
@@ -150,8 +154,8 @@ Result run (const LfsrTable& table, const std::vector<double>& theta, const Synt
 
 void print (const char* name, const Result& r)
 {
-    std::printf ("%-34s lock %7.1f ms | offset %+6.3f ms | p99 %6.3f ms | max %6.3f ms | drift %+7.3f ms | stuck %5.2f %% | reanchor %d | cfg %d | %5.1f ns/smp\n",
-                 name, r.lockMs, r.offsetMs, r.p99Ms, r.maxMs, r.driftMs, r.stuckPct, r.reanchors, r.config, r.nsPerSample);
+    std::printf ("%-34s lock %7.1f ms | offset %+6.3f ms | p99 %6.3f ms | max %6.3f ms | drift %+7.3f ms | stuck %5.2f %% | reanchor %d | cfg %d | %5.1f ns/smp | click %.4f\n",
+                 name, r.lockMs, r.offsetMs, r.p99Ms, r.maxMs, r.driftMs, r.stuckPct, r.reanchors, r.config, r.nsPerSample, r.clickMs);
 }
 
 // --------------------------------------------------------------------------
@@ -308,5 +312,55 @@ int main (int argc, char** argv)
         print ("scratch 30 s, noise/hum -40 dB", run (tableA, integrateSpeed (scratchProfile (30, sr, 5), 20000, sr, 1000), o));
     }
     print ("scratch 30 s, block 1024", run (tableA, integrateSpeed (scratchProfile (30, sr, 9), 20000, sr, 1000), opt, 1024));
+
+    // 8. Back-cueing in Relative mode: play 0.5 s at 1x, pull back to the cue at
+    //    about -2x, 40 times. Slips must not pile up in the relative position.
+    {
+        std::vector<double> v (size_t (sr), 1.0); // 1 s to lock
+        const double k = 1.0 - std::exp (-1.0 / (0.006 * sr));
+        double cur = 1.0, pos = 0.0;
+        for (int rep = 0; rep < 40; ++rep)
+        {
+            for (size_t i = 0; i < size_t (0.5 * sr); ++i) { cur += k * (1.0 - cur); v.push_back (cur); pos += cur / sr; }
+            while (pos > 0.0) { cur += k * (-2.0 - cur); v.push_back (cur); pos += cur / sr; }
+        }
+        for (size_t i = 0; i < size_t (0.2 * sr); ++i) { cur += k * (0.0 - cur); v.push_back (cur); }
+        auto th = integrateSpeed (v, 20000, sr, 1000);
+        std::vector<float> L, R; synthesize (tableA, th, opt, L, R);
+        TimecodeDecoder dec; dec.prepare (sr); dec.setTable (&tableA); dec.setGateDb (-36.f);
+        std::vector<double> rel (th.size());
+        for (size_t i = 0; i < th.size(); i += 128)
+        {
+            const int n = int (std::min<size_t> (128, th.size() - i));
+            dec.process (L.data() + i, R.data() + i, n, nullptr, rel.data() + i, nullptr);
+        }
+        // relative error referred to the moment the first stroke starts
+        const size_t i0 = size_t (sr);
+        const double ref = rel[i0] - th[i0];
+        double maxErr = 0.0;
+        for (size_t i = i0; i < th.size(); ++i) maxErr = std::max (maxErr, std::abs (rel[i] - th[i] - ref));
+        const double endErr = rel.back() - th.back() - ref;
+        std::printf ("%-34s relative position: end %+7.3f ms | max %6.3f ms | reanchor %d\n", "back-cue 40x (1x / -2x)",
+                     endErr, maxErr, dec.status().reanchors);
+    }
+
+    // 7. Disturbances seen on real recordings (Issue #1)
+    {
+        // Pushing / dragging the record moves the stylus at low frequencies,
+        // the L/R circle leaves the origin and reversals used to click.
+        SynthOptions o = opt; o.handOffset = 0.25;
+        print ("scratch 30 s, hand offset -12 dB", run (tableA, integrateSpeed (scratchProfile (30, sr, 13), 20000, sr, 1000), o));
+        print ("slow, hand offset -12 dB", run (tableA, integrateSpeed (slowProfile (sr), 5000, sr, 1000), o));
+    }
+    {
+        // Stopped record with knocks: p99 / max are the wander of the output.
+        std::vector<double> v (size_t (1.0 * sr), 1.0);
+        for (size_t i = 0; i < size_t (0.2 * sr); ++i) v.push_back (1.0 - double (i) / (0.2 * sr)); // hand stops it
+        v.resize (size_t (11.2 * sr), 0.0);
+        SynthOptions o = opt; o.vibration = 0.0316; // -30 dB
+        std::vector<char> mask (v.size(), 0);               // evaluate the stopped part only
+        std::fill (mask.begin() + long (1.5 * sr), mask.end(), char (1));
+        print ("standstill 10 s, vibration -30 dB", run (tableA, integrateSpeed (v, 5000, sr, 1000), o, 128, &mask));
+    }
     return 0;
 }

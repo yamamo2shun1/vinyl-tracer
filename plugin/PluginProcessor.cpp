@@ -69,12 +69,15 @@ void VinylTracerProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     currentTimecode = -1;
     if (savedConfig.load() >= 0)
         decoder.setPreferredConfig (savedConfig.load());
+    if (savedNominalDb.load() > kNoNominal)
+        decoder.setNominalDb (savedNominalDb.load());
     player.prepare (sampleRate);
 
     const size_t n = size_t (juce::jmax (64, samplesPerBlock));
     posAbs.assign (n, 0.0);
     posRel.assign (n, 0.0);
     vinyl.assign (n, 0.0);
+    quality.assign (n, 1.f);
     lastMode = -1;
 }
 
@@ -97,6 +100,8 @@ void VinylTracerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         currentTimecode = tc;
     }
     decoder.setGateDb (pThreshold->load());
+    if (nominalRequest.exchange (false))
+        decoder.setNominalDb (savedNominalDb.load());
 
     const int  mode = int (pMode->load());          // 0 = absolute, 1 = relative
     const bool thru = pThru->load() > 0.5f;
@@ -119,7 +124,7 @@ void VinylTracerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         const int n = juce::jmin (chunkMax, numSamples - offset);
 
         // 1. decode (reads the input before the output overwrites it)
-        decoder.process (inL + offset, inR + offset, n, posAbs.data(), posRel.data(), nullptr);
+        decoder.process (inL + offset, inR + offset, n, posAbs.data(), posRel.data(), nullptr, quality.data());
 
         // scope: raw input, normalised to the tracked nominal level
         {
@@ -164,7 +169,7 @@ void VinylTracerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         if (thru)
             continue; // leave the timecode in the buffer for checking the routing
 
-        player.render (sample, vinyl.data(), n, pp, outL + offset, outR + offset);
+        player.render (sample, vinyl.data(), n, pp, outL + offset, outR + offset, quality.data());
     }
 
     for (int ch = 2; ch < buffer.getNumChannels(); ++ch)
@@ -183,6 +188,7 @@ void VinylTracerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     stConfig.store (st.config);
     stReanchors.store (st.reanchors);
     if (st.config >= 0) savedConfig.store (st.config);
+    if (st.refLearned)  savedNominalDb.store (st.refDb);
 }
 
 //==============================================================================
@@ -266,6 +272,8 @@ void VinylTracerProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty ("cueCycles", cueCycles.load(), nullptr);
     state.setProperty ("cueValid", cueValid.load(), nullptr);
     state.setProperty ("config", savedConfig.load(), nullptr);
+    if (savedNominalDb.load() > kNoNominal)
+        state.setProperty ("nominalDb", savedNominalDb.load(), nullptr);
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
 }
@@ -285,6 +293,12 @@ void VinylTracerProcessor::setStateInformation (const void* data, int sizeInByte
     savedConfig.store (cfg);
     if (cfg >= 0)
         decoder.setPreferredConfig (cfg);
+    const float nominal = float (state.getProperty ("nominalDb", double (kNoNominal)));
+    if (nominal > kNoNominal)
+    {
+        savedNominalDb.store (nominal);
+        nominalRequest.store (true); // applied on the audio thread
+    }
 
     const juce::File f (state.getProperty ("samplePath", juce::String()).toString());
     if (f.existsAsFile())

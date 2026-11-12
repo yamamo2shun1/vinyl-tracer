@@ -77,6 +77,7 @@ private:
     vt::ScratchPlayer   player;
 
     std::vector<double> posAbs, posRel, vinyl;
+    std::vector<float>  quality;
     int    currentTimecode = -1;
     int    lastMode = -1;
     double relBase = 0.0;
@@ -86,6 +87,9 @@ private:
     std::atomic<bool>   cueValid { false };
     std::atomic<bool>   cueRequest { false };
     std::atomic<int>    savedConfig { -1 };
+    static constexpr float kNoNominal = -100.f;          // "no stored level"
+    std::atomic<float>  savedNominalDb { kNoNominal };   // measured timecode level (dBFS)
+    std::atomic<bool>   nominalRequest { false };
 
     // Sample ownership: the message thread owns shared_ptrs; the audio thread
     // only sees a raw pointer. Replaced samples are kept alive for a while.

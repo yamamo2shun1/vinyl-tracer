@@ -33,6 +33,7 @@ struct DecoderStatus
     double speed       = 0.0;   // 1.0 = nominal speed
     float  levelDb     = -120.f;// input peak level (dBFS)
     float  refDb       = -120.f;// tracked nominal carrier level (dBFS)
+    bool   refLearned  = false; // refDb was measured (or restored), not the default
     int    config      = -1;    // detected channel/polarity/direction config
     int    reanchors   = 0;     // number of absolute jumps (needle drops / slips)
     float  scopeL      = 0.f;   // calibrated, normalised scope sample
@@ -51,16 +52,23 @@ public:
     // Gate threshold relative to the nominal carrier level (e.g. -36 dB).
     void setGateDb (float db) noexcept;
 
+    // Nominal carrier level (dBFS) measured in an earlier session, so that the
+    // gate is right before the record has been played at normal speed.
+    void setNominalDb (float db) noexcept;
+
     // Detected configuration (0..7) so it can be stored with the session.
     int  getConfig() const noexcept { return selected_; }
     void setPreferredConfig (int cfg) noexcept;
 
     // Decode a block. Any output pointer may be null.
     //  posAbs : absolute position in cycles (tracked phase + anchor)
-    //  posRel : tracked phase only (cycles), never jumps
+    //  posRel : tracked phase plus slewed slip corrections (cycles), never jumps
+    //           (needle drops are ignored, tracker slips are not left in)
     //  speed  : 1.0 = nominal
+    //  quality: 1 = clean carrier, falling to 0 while the input is not one
+    //           (stylus skating / skipping; the position follows noise there)
     void process (const float* left, const float* right, int numSamples,
-                  double* posAbs, double* posRel, float* speed) noexcept;
+                  double* posAbs, double* posRel, float* speed, float* quality = nullptr) noexcept;
 
     const DecoderStatus& status() const noexcept { return status_; }
 
@@ -89,10 +97,16 @@ private:
     double eLL_ = 1e-9, eRR_ = 1e-9, eLR_ = 0.0, kCal_ = 0.0;
 
     // Gate / level
-    double refAmp_ = 0.02, kRef_ = 0.0;
+    // Nominal carrier level. The default (-20 dBFS, a typical line-level
+    // timecode) keeps the gate above vibration and hum of a stopped record
+    // until the real level has been measured or restored.
+    double refAmp_ = 0.1, kRef_ = 0.0;
+    int    refLearnSamples_ = 0, refLearnNeeded_ = 1;
     double gateLin_ = 0.0158; // -36 dB
     double shortPow_ = 0.0, kShort_ = 0.0;
     double noiseFloor_ = 1e-7, kNfFall_ = 0.0, nfRise_ = 1.0;
+    double gateMag_ = 0.0, kGateMag_ = 0.0;   // short magnitude average (closing)
+    double gatePow_ = 0.0, kGatePow_ = 0.0;   // short power average (opening)
     bool   gateOpen_ = false;
     float  peak_ = 0.f, kPeak_ = 0.f;
 
@@ -103,6 +117,16 @@ private:
     double X_ = 0.0, V_ = 0.0, A_ = 0.0;
     double loopA_ = 0.0, loopB_ = 0.0, loopC_ = 0.0, coast_ = 0.0;
     double lastLoopSpeed_ = -1.0;
+    double vMax_ = 1.0;                 // speed limit in X turns per sample
+    double lockErr_ = 0.0, kLockErr_ = 0.0; // mean |residual| of the loop
+    double relShift_ = 0.0;                 // keeps posRel continuous when the direction is detected
+    double relCorr_ = 0.0, relCorrTarget_ = 0.0; // slip corrections applied to posRel (slewed)
+    double lastOpenSpeed_ = 0.0;            // |speed| while the carrier was last present
+    double slowSpeed_ = 0.0, kSlowSpeed_ = 0.0; // |speed| averaged over 10 ms
+
+    // Frequency acquisition after the gate opens
+    int    acqN_ = 0;
+    double acqSum_ = 0.0, acqSq_ = 0.0, acqLast_ = 0.0;
 
     // Zero crossing state of the calibrated channels
     bool posL_ = false, posR_ = false;

@@ -8,6 +8,7 @@
 
 #include "TimecodeDecoder.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -86,9 +87,13 @@ int main (int argc, char** argv)
 {
     if (argc < 2)
     {
-        std::printf ("usage: tc_analyze input.wav [--side A|B] [--gate dB] [--csv out.csv] [--block N]\n");
+        std::printf ("usage: tc_analyze input.wav [--side A|B] [--gate dB] [--csv out.csv] [--block N] [--window t0 t1]...\n");
         return 1;
     }
+    // --window t0 t1: report how far the output position moved in that span
+    // (e.g. a stretch where the record stood still) and its largest step.
+    struct Window { double t0, t1, lo = 1e300, hi = -1e300, step = 0; };
+    std::vector<Window> windows;
     const char* in = argv[1];
     const char* csv = nullptr;
     bool sideB = false;
@@ -100,6 +105,13 @@ int main (int argc, char** argv)
         else if (! std::strcmp (argv[i], "--gate") && i + 1 < argc)  gate = float (std::atof (argv[++i]));
         else if (! std::strcmp (argv[i], "--csv") && i + 1 < argc)   csv = argv[++i];
         else if (! std::strcmp (argv[i], "--block") && i + 1 < argc) block = std::max (1, std::atoi (argv[++i]));
+        else if (! std::strcmp (argv[i], "--window") && i + 2 < argc)
+        {
+            Window w;
+            w.t0 = std::atof (argv[++i]);
+            w.t1 = std::atof (argv[++i]);
+            windows.push_back (w);
+        }
     }
 
     std::vector<float> L, R;
@@ -114,8 +126,15 @@ int main (int argc, char** argv)
     dec.setGateDb (gate);
 
     const size_t N = L.size();
-    std::vector<double> pos (static_cast<size_t> (block));
+    std::vector<double> pos (static_cast<size_t> (block)), rel (static_cast<size_t> (block));
     std::vector<float> spd (static_cast<size_t> (block));
+
+    // Steps in the output: second difference of the tracked position (cycles
+    // per sample^2). Smooth motion stays far below kStep even in scratches;
+    // a jump of the tracker shows up as a click in the audio.
+    constexpr double kStep = 0.005;
+    double r1 = 0.0, r2 = 0.0, maxStep = 0.0;
+    size_t steps = 0, seen = 0;
 
     FILE* out = csv ? std::fopen (csv, "w") : nullptr;
     if (out) std::fprintf (out, "time_s,record_s,speed,signal,code_lock,anchored,level_db\n");
@@ -126,7 +145,26 @@ int main (int argc, char** argv)
     for (size_t i = 0; i < N; i += size_t (block))
     {
         const int n = int (std::min (size_t (block), N - i));
-        dec.process (L.data() + i, R.data() + i, n, pos.data(), nullptr, spd.data());
+        // Steps are counted once the direction is known (the relative position
+        // changes sign when it is detected).
+        const bool count = dec.status().anchored;
+        dec.process (L.data() + i, R.data() + i, n, pos.data(), rel.data(), spd.data());
+        for (int k = 0; k < n; ++k)
+        {
+            const double r0 = rel[size_t (k)];
+            const double tk = double (i + size_t (k)) / sr;
+            const double d2 = (count && seen >= 2) ? std::abs (r0 - 2.0 * r1 + r2) : 0.0;
+            if (d2 > kStep) ++steps;
+            maxStep = std::max (maxStep, d2);
+            for (auto& w : windows)
+                if (tk >= w.t0 && tk < w.t1)
+                {
+                    w.lo = std::min (w.lo, r0);
+                    w.hi = std::max (w.hi, r0);
+                    w.step = std::max (w.step, d2);
+                }
+            r2 = r1; r1 = r0; ++seen;
+        }
         const auto& st = dec.status();
         if (st.signal)  sigSamples  += size_t (n);
         if (st.bitLock) lockSamples += size_t (n);
@@ -153,6 +191,10 @@ int main (int argc, char** argv)
                  st.config < 0 ? "-" : (((st.config >> 1) & 1) ? "neg" : "pos"),
                  st.config < 0 ? "-" : ((st.config & 1) ? "inverted" : "normal"));
     std::printf ("nominal level   : %.1f dBFS\n", st.refDb);
+    std::printf ("output steps    : %zu (> %.3f cycles), largest %.4f cycles\n", steps, kStep, maxStep);
+    for (const auto& w : windows)
+        std::printf ("window %6.2f-%6.2f s: moved %.3f cycles, largest step %.4f\n",
+                     w.t0, w.t1, w.hi >= w.lo ? w.hi - w.lo : 0.0, w.step);
     if (firstAnchor < 0)
         std::printf ("\nNo lock: check side A/B, that the input is stereo, and that the level is not clipping.\n");
     return 0;

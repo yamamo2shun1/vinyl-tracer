@@ -29,6 +29,10 @@ struct SynthOptions
     double skewDeg     = 8.0;    // quadrature error
     bool   swapLR      = false;  // test auto-detection
     bool   invertR     = false;
+    // Real-world disturbances seen on recordings (0 = off, relative to level):
+    double handOffset  = 0.0;    // low-frequency (3-25 Hz) stylus displacement while the
+                                 // record is pushed / pulled; scales with |acceleration|
+    double vibration   = 0.0;    // 40 Hz bursts (30 ms every 250 ms), e.g. desk / tonearm knocks
     uint32_t seed      = 1234;
 };
 

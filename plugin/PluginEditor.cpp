@@ -70,7 +70,7 @@ void WaveView::setSample (std::shared_ptr<const vt::SampleData> s)
         return;
     }
 
-    const int bins = 1000;
+    const int bins = 4096; // aggregated per pixel column in paint()
     const auto& x = s->levels[0][0];
     mins.assign (bins, 0.f);
     maxs.assign (bins, 0.f);
@@ -109,12 +109,25 @@ void WaveView::paint (juce::Graphics& g)
     auto inner = r.reduced (6.f, 10.f);
     const float mid = inner.getCentreY();
     const float h = inner.getHeight() * 0.5f;
-    g.setColour (kAccent.withAlpha (0.55f));
-    const int n = int (mins.size());
-    for (int i = 0; i < n; ++i)
+    // One opaque column per pixel, touching its neighbours: drawing the bins as
+    // semi-transparent lines at rounded positions left periodic gaps/overlaps
+    // that looked like discontinuities in the sample.
+    g.setColour (kPanel.interpolatedWith (kAccent, 0.55f));
+    const int n    = int (mins.size());
+    const int cols = juce::jmax (1, int (inner.getWidth()));
+    const float colW = inner.getWidth() / float (cols);
+    for (int c = 0; c < cols; ++c)
     {
-        const float x = inner.getX() + inner.getWidth() * float (i) / float (n);
-        g.drawVerticalLine (int (x), mid - maxs[size_t (i)] * h, mid - mins[size_t (i)] * h);
+        const int b0 = int (int64_t (c) * n / cols);
+        const int b1 = juce::jmax (b0 + 1, int (int64_t (c + 1) * n / cols));
+        float mn = 0.f, mx = 0.f;
+        for (int b = b0; b < b1 && b < n; ++b)
+        {
+            mn = juce::jmin (mn, mins[size_t (b)]);
+            mx = juce::jmax (mx, maxs[size_t (b)]);
+        }
+        g.fillRect (juce::Rectangle<float> (inner.getX() + float (c) * colW, mid - mx * h,
+                                            colW, juce::jmax (1.f, (mx - mn) * h)));
     }
 
     // sample start (cue) and playhead
@@ -214,7 +227,8 @@ void VinylTracerEditor::paint (juce::Graphics& g)
     g.drawText ("Vinyl Tracer", 14, 8, 300, 26, juce::Justification::centredLeft);
     g.setColour (kDim);
     g.setFont (juce::Font (juce::FontOptions (11.f)));
-    g.drawText ("v0.1 prototype", 180, 8, 200, 26, juce::Justification::centredLeft);
+    // Version from CMake (project VERSION), so a replaced build is recognisable.
+    g.drawText ("v" JucePlugin_VersionString " prototype", 180, 8, 200, 26, juce::Justification::centredLeft);
 }
 
 void VinylTracerEditor::resized()
