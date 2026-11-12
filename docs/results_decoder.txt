@@ -1,0 +1,18 @@
+LFSR self-test: OK
+
+Scenario (48 kHz, block 128, cartridge+RIAA, noise -60 dB, R gain 0.85, skew 8 deg)
+1x play 20 s                       lock    61.3 ms | offset -0.172 ms | p99  0.025 ms | max  0.032 ms | drift  -0.000 ms | stuck  0.00 % | reanchor 0 | cfg 0 |  55.2 ns/smp
+slow (0.2x..0.01x)                 lock    61.3 ms | offset -1.012 ms | p99  0.891 ms | max  1.032 ms | drift  -0.784 ms | stuck  0.00 % | reanchor 0 | cfg 0 |  44.0 ns/smp
+scratch 300 s (<=4x)               lock    66.7 ms | offset -0.222 ms | p99  0.790 ms | max  1.976 ms | drift  -0.169 ms | stuck  0.16 % | reanchor 151 | cfg 0 |  61.6 ns/smp
+scratch 300 s (<=8x flicks)        lock    66.7 ms | offset -0.266 ms | p99  1.022 ms | max  2.359 ms | drift  -0.054 ms | stuck  0.16 % | reanchor 134 | cfg 0 |  81.0 ns/smp
+needle drop (excl. 100 ms after)   lock    61.3 ms | offset -0.165 ms | p99  0.031 ms | max  0.039 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 2 | cfg 0 |  71.1 ns/smp
+                                   re-lock after drop: 62.7 ms
+autodetect swap=0 invert=0         lock    61.3 ms | offset -0.172 ms | p99  0.025 ms | max  0.032 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 0 |  68.4 ns/smp
+autodetect swap=1 invert=0         lock    61.3 ms | offset -0.687 ms | p99  0.025 ms | max  0.032 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 7 |  74.8 ns/smp
+autodetect swap=0 invert=1         lock    61.3 ms | offset -0.172 ms | p99  0.025 ms | max  0.032 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 3 |  67.2 ns/smp
+autodetect swap=1 invert=1         lock    61.3 ms | offset -0.687 ms | p99  0.025 ms | max  0.032 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 4 |  58.8 ns/smp
+side B 1x play                     lock    42.7 ms | offset -0.157 ms | p99  0.025 ms | max  0.031 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 0 |  58.5 ns/smp
+scratch 30 s @ 44.1 kHz            lock    66.8 ms | offset -0.227 ms | p99  0.679 ms | max  0.816 ms | drift  -0.074 ms | stuck  0.23 % | reanchor 12 | cfg 0 |  72.3 ns/smp
+scratch 30 s @ 96.0 kHz            lock    68.0 ms | offset -0.209 ms | p99  0.632 ms | max  0.741 ms | drift  -0.043 ms | stuck  0.23 % | reanchor 12 | cfg 0 |  53.7 ns/smp
+scratch 30 s, noise/hum -40 dB     lock    85.3 ms | offset -0.682 ms | p99  7.836 ms | max  8.317 ms | drift  -0.310 ms | stuck  0.11 % | reanchor 16 | cfg 2 |  77.1 ns/smp
+scratch 30 s, block 1024           lock    64.0 ms | offset -0.215 ms | p99  1.471 ms | max  1.536 ms | drift  +0.188 ms | stuck  0.20 % | reanchor 18 | cfg 0 |  58.7 ns/smp
