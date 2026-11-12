@@ -323,7 +323,7 @@ void VinylTracerEditor::loadFile (const juce::File& f)
         juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Vinyl Tracer", err);
 }
 
-bool VinylTracerEditor::isInterestedInFileDragOperation (const juce::StringArray& files)
+bool VinylTracerEditor::isInterestedInFileDrag (const juce::StringArray& files)
 {
     for (const auto& f : files)
         if (f.endsWithIgnoreCase (".wav") || f.endsWithIgnoreCase (".aif") || f.endsWithIgnoreCase (".aiff")
