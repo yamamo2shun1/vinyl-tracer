@@ -3,6 +3,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include "PluginProcessor.h"
 
+#include <array>
 #include <vector>
 
 // Lissajous display of the timecode input (like the scope in DVS software).
@@ -24,12 +25,15 @@ class WaveView : public juce::Component
 public:
     void setSample (std::shared_ptr<const vt::SampleData> s);
     void setPlayhead (double seconds) { playhead = seconds; repaint(); }
+    // Cue points in seconds (NaN = empty), drawn as markers over the waveform.
+    void setCues (const std::array<double, VinylTracerProcessor::kNumCues>& c) { cues = c; }
     void paint (juce::Graphics&) override;
 
 private:
     std::vector<float> mins, maxs;
     double duration = 0.0;
     double playhead = 0.0;
+    std::array<double, VinylTracerProcessor::kNumCues> cues {};
     juce::String name;
 };
 
@@ -51,12 +55,16 @@ private:
     void timerCallback() override;
     void loadFile (const juce::File& f);
     void openChooser();
+    void cueClicked (int index);
+    void updateCueButtons();
     static void fillChoices (juce::ComboBox& box, juce::RangedAudioParameter* param);
 
     VinylTracerProcessor& proc;
 
     juce::TextButton loadButton { "Load Sample..." };
-    juce::TextButton cueButton  { "Set Cue Here" };
+    std::array<juce::TextButton, VinylTracerProcessor::kNumCues> cueButtons;
+    std::array<double, VinylTracerProcessor::kNumCues> shownCues {};
+    juce::TooltipWindow tooltips { this };
     juce::Label      sampleLabel, statusLabel, levelLabel;
 
     juce::ComboBox   timecodeBox, modeBox, rpmBox;
