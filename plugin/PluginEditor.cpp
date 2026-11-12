@@ -15,7 +15,41 @@ const juce::Colour kCueColours[VinylTracerProcessor::kNumCues] {
     juce::Colour (0xffff5c5c), juce::Colour (0xff4da3ff), juce::Colour (0xffffd84d), juce::Colour (0xffd36bff)
 };
 
+// Waveform colours by amplitude relative to the sample's peak: kWaveSteps steps,
+// interpolated between these anchors (dark blue -> green -> yellow -> red)
+constexpr int kWaveSteps = 16;
+const juce::Colour kWaveAnchors[] {
+    juce::Colour (0xff24507a), juce::Colour (0xff2a7fa8), juce::Colour (0xff2fb3b0), juce::Colour (0xff3ddc97),
+    juce::Colour (0xff9be05a), juce::Colour (0xffe8d44d), juce::Colour (0xffff9a3d), juce::Colour (0xffff4f3d)
+};
+
+juce::Colour waveColour (float a) // a: amplitude relative to the sample's peak
+{
+    static const auto table = []
+    {
+        constexpr int nA = int (std::size (kWaveAnchors));
+        std::array<juce::Colour, kWaveSteps> t;
+        for (int i = 0; i < kWaveSteps; ++i)
+        {
+            const float p = float (i) / float (kWaveSteps - 1) * float (nA - 1);
+            const int   j = juce::jmin (int (p), nA - 2);
+            t[size_t (i)] = kWaveAnchors[j].interpolatedWith (kWaveAnchors[j + 1], p - float (j));
+        }
+        return t;
+    }();
+    return table[size_t (juce::jlimit (0, kWaveSteps - 1, int (a * float (kWaveSteps))))];
+}
+
+constexpr float kWaveHeight = 0.8f; // waveform height relative to its area (margin above / below)
+
 bool sameCue (double a, double b) { return (std::isnan (a) && std::isnan (b)) || a == b; }
+
+juce::String formatMinSec (double seconds) // m:ss
+{
+    const bool neg = seconds < 0;
+    const int total = int (std::floor (std::abs (seconds)));
+    return (neg ? "-" : "") + juce::String (total / 60) + ":" + juce::String (total % 60).paddedLeft ('0', 2);
+}
 
 juce::String formatTime (double seconds)
 {
@@ -50,12 +84,17 @@ void ScopeView::paint (juce::Graphics& g)
     g.drawLine (c.x - radius, c.y, c.x + radius, c.y, 0.5f);
     g.drawLine (c.x, c.y - radius, c.x, c.y + radius, 0.5f);
 
-    g.setColour (kAccent);
+    // Inside the guide circle: its edge is 1.4 x the nominal level, larger
+    // points are pulled in to it. Colour by the distance from the centre
+    // (16 steps).
+    constexpr float kEdge = 1.4f;
+    const float scale = radius / kEdge;
     for (const auto& p : points)
     {
-        const float x = c.x + juce::jlimit (-1.4f, 1.4f, p.x) * radius;
-        const float y = c.y - juce::jlimit (-1.4f, 1.4f, p.y) * radius;
-        g.fillRect (x, y, 1.5f, 1.5f);
+        const float m = std::sqrt (p.x * p.x + p.y * p.y);
+        const float k = m > kEdge ? kEdge / m : 1.f;
+        g.setColour (waveColour (juce::jmin (m, kEdge) / kEdge));
+        g.fillRect (c.x + p.x * k * scale - 0.75f, c.y - p.y * k * scale - 0.75f, 1.5f, 1.5f);
     }
 
     g.setColour (kDim);
@@ -68,7 +107,12 @@ void WaveView::setSample (std::shared_ptr<const vt::SampleData> s)
 {
     mins.clear();
     maxs.clear();
+    meanSq.clear();
+    ovMins.clear();
+    ovMaxs.clear();
+    ovRms.clear();
     duration = 0.0;
+    peak = 1.f;
     name = {};
     if (s == nullptr || s->levels.empty() || s->length == 0)
     {
@@ -76,24 +120,37 @@ void WaveView::setSample (std::shared_ptr<const vt::SampleData> s)
         return;
     }
 
-    const int bins = 4096; // aggregated per pixel column in paint()
-    const auto& x = s->levels[0][0];
+    // Fixed-size bins (not a fixed number for the whole sample): the view shows
+    // a few seconds, so a long sample needs as much detail as a short one.
+    const auto& lv = s->levels[0];
+    const int64_t n = s->length;
+    const size_t bins = size_t ((n + kBinFrames - 1) / kBinFrames);
     mins.assign (bins, 0.f);
     maxs.assign (bins, 0.f);
-    for (int b = 0; b < bins; ++b)
+    meanSq.assign (bins, 0.f);
+    float pk = 0.f;
+    for (size_t b = 0; b < bins; ++b)
     {
-        const int64_t a = int64_t (x.size()) * b / bins;
-        const int64_t e = juce::jmax (a + 1, int64_t (x.size()) * (b + 1) / bins);
+        const int64_t a = int64_t (b) * kBinFrames;
+        const int64_t e = juce::jmin (n, a + kBinFrames);
         float mn = 0.f, mx = 0.f;
-        for (int64_t i = a; i < e && i < int64_t (x.size()); ++i)
-        {
-            mn = juce::jmin (mn, x[size_t (i)]);
-            mx = juce::jmax (mx, x[size_t (i)]);
-        }
-        mins[size_t (b)] = mn;
-        maxs[size_t (b)] = mx;
+        double sq = 0.0;
+        for (const auto& ch : lv)
+            for (int64_t i = a; i < e; ++i)
+            {
+                const float v = ch[size_t (i)];
+                mn = juce::jmin (mn, v);
+                mx = juce::jmax (mx, v);
+                sq += double (v) * v;
+            }
+        mins[b] = mn;
+        maxs[b] = mx;
+        meanSq[b] = float (sq / double (juce::jmax<int64_t> (1, (e - a) * int64_t (lv.size()))));
+        pk = juce::jmax (pk, mx, -mn);
     }
-    duration = double (s->length) / s->sampleRate;
+    peak = pk > 1e-6f ? pk : 1.f;
+    binSeconds = double (kBinFrames) / s->sampleRate;
+    duration = double (n) / s->sampleRate;
     name = juce::String (s->name);
     repaint();
 }
@@ -104,7 +161,7 @@ void WaveView::paint (juce::Graphics& g)
     g.setColour (kPanel);
     g.fillRoundedRectangle (r, 6.f);
 
-    if (mins.empty())
+    if (mins.empty() || duration <= 0.0)
     {
         g.setColour (kDim);
         g.setFont (juce::Font (juce::FontOptions (14.f)));
@@ -112,61 +169,208 @@ void WaveView::paint (juce::Graphics& g)
         return;
     }
 
-    auto inner = r.reduced (6.f, 10.f);
-    const float mid = inner.getCentreY();
-    const float h = inner.getHeight() * 0.5f;
-    // One opaque column per pixel, touching its neighbours: drawing the bins as
-    // semi-transparent lines at rounded positions left periodic gaps/overlaps
-    // that looked like discontinuities in the sample.
-    g.setColour (kPanel.interpolatedWith (kAccent, 0.55f));
-    const int n    = int (mins.size());
-    const int cols = juce::jmax (1, int (inner.getWidth()));
-    const float colW = inner.getWidth() / float (cols);
-    for (int c = 0; c < cols; ++c)
+    juce::Rectangle<float> scrollArea, overviewArea;
+    layout (scrollArea, overviewArea);
+
+    paintScroll (g, scrollArea);
+    g.setColour (kBg.withAlpha (0.6f));
+    g.fillRect (r.getX() + 6.f, overviewArea.getY() - 2.5f, r.getWidth() - 12.f, 1.f);
+    paintOverview (g, overviewArea);
+
+    g.setColour (kText);
+    g.setFont (juce::Font (juce::FontOptions (12.f)));
+    g.drawText (name, scrollArea.reduced (2.f, 0.f).withTrimmedLeft (16.f).withTrimmedRight (130.f),
+                juce::Justification::topLeft);
+    // playback position / total length
+    g.setFont (juce::Font (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), 13.f, juce::Font::bold)));
+    g.drawText (formatMinSec (wrapped (playhead)) + " / " + formatMinSec (duration), scrollArea.reduced (2.f, 0.f),
+                juce::Justification::topRight);
+}
+
+void WaveView::layout (juce::Rectangle<float>& scroll, juce::Rectangle<float>& overview) const
+{
+    auto inner = getLocalBounds().toFloat().reduced (6.f, 6.f);
+    scroll = inner.removeFromTop (inner.getHeight() * 2.f / 3.f);
+    inner.removeFromTop (4.f);
+    overview = inner;
+}
+
+void WaveView::mouseDown (const juce::MouseEvent& e)
+{
+    // A click in the overview plays from that point of the sample.
+    juce::Rectangle<float> scroll, overview;
+    layout (scroll, overview);
+    if (duration <= 0.0 || ! overview.contains (e.position) || onSeek == nullptr)
+        return;
+    onSeek (duration * double ((e.position.x - overview.getX()) / overview.getWidth()));
+}
+
+void WaveView::paintScroll (juce::Graphics& g, juce::Rectangle<float> area)
+{
+    const float mid  = area.getCentreY();
+    const float h    = area.getHeight() * 0.5f * kWaveHeight;
+    const int   cols = juce::jmax (1, int (area.getWidth()));
+    const double pxSeconds = viewSeconds / double (cols);
+
+    // Playhead in the centre; with Loop on the sample repeats.
+    const double tStart = wrapped (playhead) - 0.5 * viewSeconds;
+    auto xOf = [&] (double t) { return area.getX() + float ((t - tStart) / viewSeconds) * area.getWidth(); };
+
+    // Every place a sample time appears in the view (repeated when looping).
+    auto forEachX = [&] (double t, auto&& fn)
     {
-        const int b0 = int (int64_t (c) * n / cols);
-        const int b1 = juce::jmax (b0 + 1, int (int64_t (c + 1) * n / cols));
-        float mn = 0.f, mx = 0.f;
-        for (int b = b0; b < b1 && b < n; ++b)
+        if (! loop) { fn (xOf (t)); return; }
+        for (double u = t + duration * std::floor ((tStart - t) / duration); u <= tStart + viewSeconds; u += duration)
+            fn (xOf (u));
+    };
+
+    {
+        juce::Graphics::ScopedSaveState clip (g);
+        g.reduceClipRegion (area.toNearestInt());
+
+        // Columns sit on a grid fixed to the sample time, so a column always
+        // shows the same bins while the view scrolls (no shimmering); x is
+        // snapped to whole pixels so neighbouring columns touch without gaps.
+        const int64_t n  = int64_t (mins.size());
+        const int64_t k0 = int64_t (std::floor (tStart / pxSeconds));
+        const int binsPerCol = juce::jmax (1, int (std::round (pxSeconds / binSeconds)));
+        for (int64_t k = k0; k <= k0 + cols + 1; ++k)
         {
-            mn = juce::jmin (mn, mins[size_t (b)]);
-            mx = juce::jmax (mx, maxs[size_t (b)]);
+            double ts = double (k) * pxSeconds;
+            if (loop) ts -= duration * std::floor (ts / duration);
+            else if (ts < 0.0 || ts >= duration) continue;
+
+            const int64_t b0 = int64_t (ts / binSeconds);
+            float mn = 0.f, mx = 0.f;
+            for (int j = 0; j < binsPerCol; ++j)
+            {
+                int64_t b = b0 + j;
+                if (b >= n) { if (! loop) break; b -= n; }
+                mn = juce::jmin (mn, mins[size_t (b)]);
+                mx = juce::jmax (mx, maxs[size_t (b)]);
+            }
+
+            const float x0 = std::round (xOf (double (k) * pxSeconds));
+            const float x1 = std::round (xOf (double (k + 1) * pxSeconds));
+            g.setColour (waveColour (juce::jmax (mx, -mn) / peak));
+            g.fillRect (juce::Rectangle<float> (x0, mid - mx / peak * h, juce::jmax (1.f, x1 - x0),
+                                                juce::jmax (1.f, (mx - mn) / peak * h)));
         }
-        g.fillRect (juce::Rectangle<float> (inner.getX() + float (c) * colW, mid - mx * h,
-                                            colW, juce::jmax (1.f, (mx - mn) * h)));
+
+        // zero axis
+        g.setColour (kText.withAlpha (0.3f));
+        g.fillRect (area.getX(), std::round (mid) - 0.5f, area.getWidth(), 1.f);
+
+        // sample start
+        g.setColour (kWarn);
+        forEachX (0.0, [&] (float x) { g.fillRect (x - 0.5f, area.getY(), 1.f, area.getHeight()); });
     }
 
-    // sample start, cue point markers (over the waveform) and playhead
-    g.setColour (kWarn);
-    g.drawVerticalLine (int (inner.getX()), inner.getY(), inner.getBottom());
-    if (duration > 0.0)
+    // cue point markers (over the waveform)
+    g.setFont (juce::Font (juce::FontOptions (10.f, juce::Font::bold)));
+    for (int k = 0; k < VinylTracerProcessor::kNumCues; ++k)
     {
-        g.setFont (juce::Font (juce::FontOptions (10.f, juce::Font::bold)));
-        for (int k = 0; k < VinylTracerProcessor::kNumCues; ++k)
+        const double t = cues[size_t (k)];
+        if (std::isnan (t)) continue;
+        forEachX (t, [&] (float x)
         {
-            const double t = cues[size_t (k)];
-            if (std::isnan (t)) continue;
-            const float x = inner.getX() + inner.getWidth() * float (juce::jlimit (0.0, 1.0, t / duration));
+            if (x < area.getX() || x > area.getRight()) return;
             g.setColour (kCueColours[k].withAlpha (0.85f));
-            g.fillRect (x - 0.75f, r.getY() + 2.f, 1.5f, r.getHeight() - 4.f);
-            // flag with the number at the top
-            const juce::Rectangle<float> flag (x, r.getY() + 2.f, 13.f, 13.f);
+            g.fillRect (x - 0.75f, area.getY(), 1.5f, area.getHeight());
+            const juce::Rectangle<float> flag (x, area.getY(), 13.f, 13.f); // number at the top
             g.setColour (kCueColours[k]);
             g.fillRect (flag);
             g.setColour (kBg);
             g.drawText (juce::String (k + 1), flag, juce::Justification::centred);
-        }
-    }
-    if (duration > 0.0 && playhead >= 0.0 && playhead <= duration)
-    {
-        const float px = inner.getX() + inner.getWidth() * float (playhead / duration);
-        g.setColour (juce::Colours::white);
-        g.fillRect (px - 1.f, inner.getY(), 2.f, inner.getHeight());
+        });
     }
 
-    g.setColour (kText);
-    g.setFont (juce::Font (juce::FontOptions (12.f)));
-    g.drawText (name + "   (" + juce::String (duration, 2) + " s)", r.reduced (8.f, 4.f), juce::Justification::topLeft);
+    // playhead (fixed in the centre)
+    g.setColour (juce::Colours::white);
+    g.fillRect (area.getCentreX() - 1.f, area.getY(), 2.f, area.getHeight());
+}
+
+void WaveView::paintOverview (juce::Graphics& g, juce::Rectangle<float> area)
+{
+    const int cols = juce::jmax (1, int (area.getWidth()));
+    const float colW = area.getWidth() / float (cols);
+    const float mid  = area.getCentreY();
+    const float h    = area.getHeight() * 0.5f * kWaveHeight;
+
+    // one min / max / RMS per pixel column, rebuilt only when the width changes
+    if (int (ovMins.size()) != cols)
+    {
+        const int64_t n = int64_t (mins.size());
+        ovMins.assign (size_t (cols), 0.f);
+        ovMaxs.assign (size_t (cols), 0.f);
+        ovRms.assign (size_t (cols), 0.f);
+        ovRmsMax = 0.f;
+        for (int c = 0; c < cols; ++c)
+        {
+            const int64_t b0 = n * c / cols;
+            const int64_t b1 = juce::jmax (b0 + 1, n * (c + 1) / cols);
+            float mn = 0.f, mx = 0.f;
+            double sq = 0.0;
+            int64_t cnt = 0;
+            for (int64_t b = b0; b < b1 && b < n; ++b, ++cnt)
+            {
+                mn = juce::jmin (mn, mins[size_t (b)]);
+                mx = juce::jmax (mx, maxs[size_t (b)]);
+                sq += meanSq[size_t (b)];
+            }
+            ovMins[size_t (c)] = mn;
+            ovMaxs[size_t (c)] = mx;
+            ovRms[size_t (c)]  = float (std::sqrt (sq / double (juce::jmax<int64_t> (1, cnt))));
+            ovRmsMax = juce::jmax (ovRmsMax, ovRms[size_t (c)]);
+        }
+        if (ovRmsMax <= 1e-9f) ovRmsMax = 1.f;
+    }
+
+    auto xOf = [&] (double t) { return area.getX() + area.getWidth() * float (t / duration); };
+
+    // the part shown in the scrolling view
+    {
+        const double t = wrapped (playhead);
+        const float x0 = xOf (t - 0.5 * viewSeconds), x1 = xOf (t + 0.5 * viewSeconds);
+        juce::Graphics::ScopedSaveState clip (g);
+        g.reduceClipRegion (area.toNearestInt());
+        g.setColour (kText.withAlpha (0.08f));
+        g.fillRect (juce::Rectangle<float>::leftTopRightBottom (x0, area.getY(), x1, area.getBottom()));
+    }
+
+    // A pixel column of a long sample spans a lot of audio, so its peak is
+    // nearly always the maximum. The colour follows the loudness (RMS,
+    // relative to the loudest column); the peak envelope is drawn faint
+    // behind the RMS body.
+    for (int c = 0; c < cols; ++c)
+    {
+        const float mn = ovMins[size_t (c)], mx = ovMaxs[size_t (c)];
+        const float rms = ovRms[size_t (c)];
+        const juce::Colour col = waveColour (rms / ovRmsMax);
+        const float x = area.getX() + float (c) * colW;
+        g.setColour (col.withAlpha (0.35f));
+        g.fillRect (juce::Rectangle<float> (x, mid - mx / peak * h, colW, juce::jmax (1.f, (mx - mn) / peak * h)));
+        const float body = juce::jmin (rms * 1.414f / peak, juce::jmax (mx, -mn) / peak) * h; // sine: peak = RMS * sqrt 2
+        g.setColour (col);
+        g.fillRect (juce::Rectangle<float> (x, mid - body, colW, juce::jmax (1.f, 2.f * body)));
+    }
+
+    // cue points
+    for (int k = 0; k < VinylTracerProcessor::kNumCues; ++k)
+    {
+        const double t = cues[size_t (k)];
+        if (std::isnan (t)) continue;
+        g.setColour (kCueColours[k]);
+        g.fillRect (xOf (juce::jlimit (0.0, duration, t)) - 0.75f, area.getY(), 1.5f, area.getHeight());
+    }
+
+    // playhead
+    const double t = wrapped (playhead);
+    if (t >= 0.0 && t <= duration)
+    {
+        g.setColour (juce::Colours::white);
+        g.fillRect (xOf (t) - 1.f, area.getY(), 2.f, area.getHeight());
+    }
 }
 
 //==============================================================================
@@ -223,6 +427,20 @@ VinylTracerEditor::VinylTracerEditor (VinylTracerProcessor& p)
     addAndMakeVisible (thruButton);
     addAndMakeVisible (loopButton);
 
+    setupLabel (viewLabel, "Wave view");
+    for (int s : VinylTracerProcessor::kWaveViewChoices)
+        viewBox.addItem (juce::String (s) + " s", s); // item id = seconds
+    shownViewSeconds = proc.getWaveViewSeconds();
+    viewBox.setSelectedId (shownViewSeconds, juce::dontSendNotification);
+    viewBox.onChange = [this]
+    {
+        proc.setWaveViewSeconds (viewBox.getSelectedId());
+        shownViewSeconds = proc.getWaveViewSeconds();
+    };
+    addAndMakeVisible (viewBox);
+    wave.setViewSeconds (double (proc.getWaveViewSeconds()));
+    wave.onSeek = [this] (double seconds) { proc.jumpTo (seconds); };
+
     timecodeAtt  = std::make_unique<ComboAttachment>  (vts, "timecode", timecodeBox);
     modeAtt      = std::make_unique<ComboAttachment>  (vts, "mode", modeBox);
     rpmAtt       = std::make_unique<ComboAttachment>  (vts, "rpm", rpmBox);
@@ -244,7 +462,7 @@ VinylTracerEditor::VinylTracerEditor (VinylTracerProcessor& p)
     addAndMakeVisible (wave);
 
     setSize (780, 460);
-    startTimerHz (30);
+    startTimerHz (60); // smooth scrolling of the waveform
 }
 
 VinylTracerEditor::~VinylTracerEditor()
@@ -309,6 +527,9 @@ void VinylTracerEditor::resized()
     auto toggles = r.removeFromTop (24);
     thruButton.setBounds (toggles.removeFromLeft (140));
     loopButton.setBounds (toggles.removeFromLeft (80));
+    toggles.removeFromLeft (20);
+    viewLabel.setBounds (toggles.removeFromLeft (70));
+    viewBox.setBounds (toggles.removeFromLeft (80));
 
     r.removeFromTop (10);
     auto bottom = r;
@@ -344,6 +565,19 @@ void VinylTracerEditor::timerCallback()
     updateCueButtons(); // also picks up cue points restored with a Live set
 
     const auto st = proc.getStatus();
+    wave.setLoop (loopButton.getToggleState());
+    {
+        const int span = proc.getWaveViewSeconds();
+        wave.setViewSeconds (double (span));
+        // Follow the processor only when its value changed elsewhere (a restored
+        // state). The box notifies onChange asynchronously; comparing with the
+        // box itself here reset a fresh selection before onChange had run.
+        if (span != shownViewSeconds)
+        {
+            shownViewSeconds = span;
+            viewBox.setSelectedId (span, juce::dontSendNotification);
+        }
+    }
     wave.setPlayhead (st.sampleSeconds);
 
     auto flag = [] (bool b, const char* on, const char* off) { return juce::String (b ? on : off); };

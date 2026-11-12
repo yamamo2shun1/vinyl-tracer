@@ -158,24 +158,20 @@ void VinylTracerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
             for (int i = 0; i < n; ++i) vinyl[size_t (i)] = posAbs[size_t (i)];
         lastVinyl = vinyl[size_t (n - 1)];
 
-        // 3. sample start: automatically at the first absolute lock; a recalled
-        //    cue point moves it so that the record plays from that point now
-        //    (the player cross-fades the jump)
+        // 3. sample start: automatically at the first absolute lock; a jump (a
+        //    recalled cue point, a click in the overview) moves it so that the
+        //    record plays from that point now (the player cross-fades the jump)
         const bool anchored = decoder.status().anchored;
         if (! cueValid.load() && (anchored || mode == 1))
         {
             cueCycles.store (lastVinyl);
             cueValid.store (true);
         }
-        const int recall = cueRecall.exchange (-1);
-        if (recall >= 0 && recall < kNumCues)
+        const double jump = jumpRequest.exchange (std::nan (""));
+        if (! std::isnan (jump))
         {
-            const double t = cuePoints[size_t (recall)].load();
-            if (! std::isnan (t))
-            {
-                cueCycles.store (lastVinyl - t * pp.cyclesPerSecond);
-                cueValid.store (true);
-            }
+            cueCycles.store (lastVinyl - jump * pp.cyclesPerSecond);
+            cueValid.store (true);
         }
         pp.cueCycles = cueCycles.load();
 
@@ -236,8 +232,8 @@ void VinylTracerProcessor::storeCue (int index) noexcept
 
 void VinylTracerProcessor::recallCue (int index) noexcept
 {
-    if (index >= 0 && index < kNumCues && ! std::isnan (cuePoints[size_t (index)].load()))
-        cueRecall.store (index);
+    if (index >= 0 && index < kNumCues)
+        jumpTo (cuePoints[size_t (index)].load()); // nothing when empty (NaN)
 }
 
 void VinylTracerProcessor::clearCue (int index) noexcept
@@ -294,6 +290,7 @@ bool VinylTracerProcessor::loadSample (const juce::File& file, juce::String& err
     currentSample = sd;
     audioSample.store (sd.get(), std::memory_order_release);
     sampleFile = file;
+    for (int i = 0; i < kNumCues; ++i) clearCue (i); // cue points belong to the previous sample
     return true;
 }
 
@@ -319,6 +316,7 @@ void VinylTracerProcessor::getStateInformation (juce::MemoryBlock& destData)
         if (! std::isnan (t))
             state.setProperty ("cuePoint" + juce::String (i + 1), t, nullptr);
     }
+    state.setProperty ("waveViewSeconds", waveViewSeconds.load(), nullptr);
     state.setProperty ("config", savedConfig.load(), nullptr);
     if (savedNominalDb.load() > kNoNominal)
         state.setProperty ("nominalDb", savedNominalDb.load(), nullptr);
@@ -337,11 +335,7 @@ void VinylTracerProcessor::setStateInformation (const void* data, int sizeInByte
 
     cueCycles.store (double (state.getProperty ("cueCycles", 0.0)));
     cueValid.store (bool (state.getProperty ("cueValid", false)));
-    for (int i = 0; i < kNumCues; ++i)
-    {
-        const juce::Identifier id ("cuePoint" + juce::String (i + 1));
-        cuePoints[size_t (i)].store (state.hasProperty (id) ? double (state.getProperty (id)) : std::nan (""));
-    }
+    setWaveViewSeconds (int (state.getProperty ("waveViewSeconds", 4)));
     const int cfg = int (state.getProperty ("config", -1));
     savedConfig.store (cfg);
     if (cfg >= 0)
@@ -358,6 +352,13 @@ void VinylTracerProcessor::setStateInformation (const void* data, int sizeInByte
     {
         juce::String err;
         loadSample (f, err);
+    }
+
+    // after loading the sample (which clears them)
+    for (int i = 0; i < kNumCues; ++i)
+    {
+        const juce::Identifier id ("cuePoint" + juce::String (i + 1));
+        cuePoints[size_t (i)].store (state.hasProperty (id) ? double (state.getProperty (id)) : std::nan (""));
     }
 }
 
