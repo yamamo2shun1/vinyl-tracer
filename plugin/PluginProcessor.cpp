@@ -29,6 +29,8 @@ VinylTracerProcessor::VinylTracerProcessor()
     pThru      = apvts.getRawParameterValue ("thru");
     pLoop      = apvts.getRawParameterValue ("loop");
 
+    for (auto& c : cuePoints) c.store (std::nan (""));
+
     formatManager.registerBasicFormats();
     startTimer (500);
 }
@@ -156,12 +158,24 @@ void VinylTracerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
             for (int i = 0; i < n; ++i) vinyl[size_t (i)] = posAbs[size_t (i)];
         lastVinyl = vinyl[size_t (n - 1)];
 
-        // 3. cue: explicit request, or automatically at the first absolute lock
+        // 3. sample start: automatically at the first absolute lock; a recalled
+        //    cue point moves it so that the record plays from that point now
+        //    (the player cross-fades the jump)
         const bool anchored = decoder.status().anchored;
-        if (cueRequest.exchange (false) || (! cueValid.load() && (anchored || mode == 1)))
+        if (! cueValid.load() && (anchored || mode == 1))
         {
             cueCycles.store (lastVinyl);
             cueValid.store (true);
+        }
+        const int recall = cueRecall.exchange (-1);
+        if (recall >= 0 && recall < kNumCues)
+        {
+            const double t = cuePoints[size_t (recall)].load();
+            if (! std::isnan (t))
+            {
+                cueCycles.store (lastVinyl - t * pp.cyclesPerSecond);
+                cueValid.store (true);
+            }
         }
         pp.cueCycles = cueCycles.load();
 
@@ -207,6 +221,34 @@ VinylTracerProcessor::Status VinylTracerProcessor::getStatus() const noexcept
     s.config        = stConfig.load();
     s.reanchors     = stReanchors.load();
     return s;
+}
+
+void VinylTracerProcessor::storeCue (int index) noexcept
+{
+    if (index < 0 || index >= kNumCues || currentSample == nullptr || currentSample->length == 0)
+        return;
+    // Position of the last block, kept inside the sample (wrapped when looping).
+    const double len = double (currentSample->length) / currentSample->sampleRate;
+    double t = stSample.load();
+    if (pLoop->load() > 0.5f) t -= len * std::floor (t / len);
+    cuePoints[size_t (index)].store (juce::jlimit (0.0, len, t));
+}
+
+void VinylTracerProcessor::recallCue (int index) noexcept
+{
+    if (index >= 0 && index < kNumCues && ! std::isnan (cuePoints[size_t (index)].load()))
+        cueRecall.store (index);
+}
+
+void VinylTracerProcessor::clearCue (int index) noexcept
+{
+    if (index >= 0 && index < kNumCues)
+        cuePoints[size_t (index)].store (std::nan (""));
+}
+
+double VinylTracerProcessor::getCue (int index) const noexcept
+{
+    return (index >= 0 && index < kNumCues) ? cuePoints[size_t (index)].load() : std::nan ("");
 }
 
 int VinylTracerProcessor::readScope (float* xy, int maxPoints) noexcept
@@ -271,6 +313,12 @@ void VinylTracerProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty ("samplePath", sampleFile.getFullPathName(), nullptr);
     state.setProperty ("cueCycles", cueCycles.load(), nullptr);
     state.setProperty ("cueValid", cueValid.load(), nullptr);
+    for (int i = 0; i < kNumCues; ++i)
+    {
+        const double t = cuePoints[size_t (i)].load();
+        if (! std::isnan (t))
+            state.setProperty ("cuePoint" + juce::String (i + 1), t, nullptr);
+    }
     state.setProperty ("config", savedConfig.load(), nullptr);
     if (savedNominalDb.load() > kNoNominal)
         state.setProperty ("nominalDb", savedNominalDb.load(), nullptr);
@@ -289,6 +337,11 @@ void VinylTracerProcessor::setStateInformation (const void* data, int sizeInByte
 
     cueCycles.store (double (state.getProperty ("cueCycles", 0.0)));
     cueValid.store (bool (state.getProperty ("cueValid", false)));
+    for (int i = 0; i < kNumCues; ++i)
+    {
+        const juce::Identifier id ("cuePoint" + juce::String (i + 1));
+        cuePoints[size_t (i)].store (state.hasProperty (id) ? double (state.getProperty (id)) : std::nan (""));
+    }
     const int cfg = int (state.getProperty ("config", -1));
     savedConfig.store (cfg);
     if (cfg >= 0)

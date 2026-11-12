@@ -10,6 +10,12 @@ const juce::Colour kAccent  { 0xff3ddc97 };
 const juce::Colour kWarn    { 0xffffb020 };
 const juce::Colour kText    { 0xffe6e6e6 };
 const juce::Colour kDim     { 0xff8a8f98 };
+// Cue point colours (buttons and waveform markers)
+const juce::Colour kCueColours[VinylTracerProcessor::kNumCues] {
+    juce::Colour (0xffff5c5c), juce::Colour (0xff4da3ff), juce::Colour (0xffffd84d), juce::Colour (0xffd36bff)
+};
+
+bool sameCue (double a, double b) { return (std::isnan (a) && std::isnan (b)) || a == b; }
 
 juce::String formatTime (double seconds)
 {
@@ -130,9 +136,27 @@ void WaveView::paint (juce::Graphics& g)
                                             colW, juce::jmax (1.f, (mx - mn) * h)));
     }
 
-    // sample start (cue) and playhead
+    // sample start, cue point markers (over the waveform) and playhead
     g.setColour (kWarn);
     g.drawVerticalLine (int (inner.getX()), inner.getY(), inner.getBottom());
+    if (duration > 0.0)
+    {
+        g.setFont (juce::Font (juce::FontOptions (10.f, juce::Font::bold)));
+        for (int k = 0; k < VinylTracerProcessor::kNumCues; ++k)
+        {
+            const double t = cues[size_t (k)];
+            if (std::isnan (t)) continue;
+            const float x = inner.getX() + inner.getWidth() * float (juce::jlimit (0.0, 1.0, t / duration));
+            g.setColour (kCueColours[k].withAlpha (0.85f));
+            g.fillRect (x - 0.75f, r.getY() + 2.f, 1.5f, r.getHeight() - 4.f);
+            // flag with the number at the top
+            const juce::Rectangle<float> flag (x, r.getY() + 2.f, 13.f, 13.f);
+            g.setColour (kCueColours[k]);
+            g.fillRect (flag);
+            g.setColour (kBg);
+            g.drawText (juce::String (k + 1), flag, juce::Justification::centred);
+        }
+    }
     if (duration > 0.0 && playhead >= 0.0 && playhead <= duration)
     {
         const float px = inner.getX() + inner.getWidth() * float (playhead / duration);
@@ -160,9 +184,24 @@ VinylTracerEditor::VinylTracerEditor (VinylTracerProcessor& p)
     };
 
     addAndMakeVisible (loadButton);
-    addAndMakeVisible (cueButton);
     loadButton.onClick = [this] { openChooser(); };
-    cueButton.onClick  = [this] { proc.requestCue(); };
+#if JUCE_MAC
+    const juce::String storeKey = "Cmd", deleteKey = "Option";
+#else
+    const juce::String storeKey = "Ctrl", deleteKey = "Alt";
+#endif
+    for (int k = 0; k < VinylTracerProcessor::kNumCues; ++k)
+    {
+        auto& b = cueButtons[size_t (k)];
+        b.setButtonText ("Cue " + juce::String (k + 1));
+        b.setTooltip ("Click: play from cue " + juce::String (k + 1) + "\n"
+                      + storeKey + "+click: store the current position\n"
+                      + deleteKey + "+click: delete");
+        b.onClick = [this, k] { cueClicked (k); };
+        addAndMakeVisible (b);
+        shownCues[size_t (k)] = 0.0; // differs from any stored state -> first update draws it
+    }
+    updateCueButtons();
 
     setupLabel (timecodeLabel, "Timecode");
     setupLabel (modeLabel, "Mode");
@@ -239,8 +278,12 @@ void VinylTracerEditor::resized()
     auto top = r.removeFromTop (28);
     loadButton.setBounds (top.removeFromLeft (130));
     top.removeFromLeft (8);
-    cueButton.setBounds (top.removeFromLeft (120));
-    top.removeFromLeft (12);
+    for (auto& b : cueButtons)
+    {
+        b.setBounds (top.removeFromLeft (60));
+        top.removeFromLeft (4);
+    }
+    top.removeFromLeft (8);
     sampleLabel.setBounds (top);
 
     r.removeFromTop (10);
@@ -298,6 +341,8 @@ void VinylTracerEditor::timerCallback()
                              juce::dontSendNotification);
     }
 
+    updateCueButtons(); // also picks up cue points restored with a Live set
+
     const auto st = proc.getStatus();
     wave.setPlayhead (st.sampleSeconds);
 
@@ -315,6 +360,40 @@ void VinylTracerEditor::timerCallback()
     levelLabel.setText ("input " + juce::String (st.levelDb, 1) + " dBFS\nnominal " + juce::String (st.refDb, 1)
                             + " dBFS  cfg " + juce::String (st.config),
                         juce::dontSendNotification);
+}
+
+void VinylTracerEditor::cueClicked (int index)
+{
+    // Ctrl (Cmd on macOS) + click stores / overwrites, Alt (Option) + click
+    // deletes, a plain click plays from the cue (nothing if it is empty).
+    const auto mods = juce::ModifierKeys::getCurrentModifiers();
+    if (mods.isAltDown())          proc.clearCue (index);
+    else if (mods.isCommandDown()) proc.storeCue (index);
+    else                           proc.recallCue (index);
+    updateCueButtons();
+}
+
+void VinylTracerEditor::updateCueButtons()
+{
+    std::array<double, VinylTracerProcessor::kNumCues> now {};
+    bool changed = false;
+    for (int k = 0; k < VinylTracerProcessor::kNumCues; ++k)
+    {
+        now[size_t (k)] = proc.getCue (k);
+        changed |= ! sameCue (now[size_t (k)], shownCues[size_t (k)]);
+    }
+    if (! changed)
+        return;
+    shownCues = now;
+    for (int k = 0; k < VinylTracerProcessor::kNumCues; ++k)
+    {
+        auto& b = cueButtons[size_t (k)];
+        const bool set = ! std::isnan (now[size_t (k)]);
+        b.setColour (juce::TextButton::buttonColourId, set ? kCueColours[k].withAlpha (0.75f) : kPanel);
+        b.setColour (juce::TextButton::textColourOffId, set ? kBg : kDim);
+    }
+    wave.setCues (now);
+    wave.repaint();
 }
 
 void VinylTracerEditor::openChooser()
