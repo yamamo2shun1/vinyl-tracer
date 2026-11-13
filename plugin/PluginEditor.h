@@ -130,6 +130,7 @@ private:
 
     VinylTracerProcessor& proc;
     VtLookAndFeel lnf; // declared before the widgets so it outlives them
+    std::unique_ptr<juce::Drawable> logo; // SVG, top right above the version (from logo/ via BinaryData)
 
     juce::TextButton loadButton { "Load Sample..." };
     juce::ToggleButton diagButton { "Diagnostics" };

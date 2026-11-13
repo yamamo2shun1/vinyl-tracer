@@ -3,6 +3,7 @@
 
 #include "PluginEditor.h"
 
+#include <BinaryData.h>
 #include <cmath>
 
 namespace
@@ -750,6 +751,8 @@ VinylTracerEditor::VinylTracerEditor (VinylTracerProcessor& p)
     : AudioProcessorEditor (&p), proc (p)
 {
     setLookAndFeel (&lnf);
+    logo = juce::Drawable::createFromImageData (VinylTracerData::vinyltracermarkdark_svg,
+                                                size_t (VinylTracerData::vinyltracermarkdark_svgSize));
     auto& vts = proc.apvts;
 
     auto setupLabel = [this] (juce::Label& l, const juce::String& text)
@@ -907,16 +910,24 @@ void VinylTracerEditor::fillChoices (juce::ComboBox& box, juce::RangedAudioParam
 void VinylTracerEditor::paint (juce::Graphics& g)
 {
     g.fillAll (kBg);
-    // Name at the top right with the version right-aligned below it, beside
-    // the Load / Cue buttons.
-    const int x = getWidth() - 14 - 300;
-    g.setColour (kText);
-    g.setFont (juce::Font (juce::FontOptions (18.f, juce::Font::bold)));
-    g.drawText ("Vinyl Tracer", x, 10, 300, 22, juce::Justification::centredRight);
+    // Logo at the top right with the version right-aligned below it, beside
+    // the Load Sample button.
+    // The logo is a vector (SVG): change logoH to resize it, it stays sharp.
+    const float right = float (getWidth() - 14);
+    constexpr float logoH = 36.f, logoTop = 6.f;
+    if (logo != nullptr)
+    {
+        const auto bounds = logo->getDrawableBounds();
+        const float logoW = bounds.getHeight() > 0.f ? logoH * bounds.getWidth() / bounds.getHeight() : logoH;
+        logo->drawWithin (g, juce::Rectangle<float> (right - logoW, logoTop, logoW, logoH),
+                          juce::RectanglePlacement::centred, 1.f);
+    }
     g.setColour (kDim);
     g.setFont (juce::Font (juce::FontOptions (11.f)));
     // Version from CMake (project VERSION), so a replaced build is recognisable.
-    g.drawText ("v" JucePlugin_VersionString " prototype", x, 32, 300, 14, juce::Justification::centredRight);
+    g.drawText ("v" JucePlugin_VersionString,
+                juce::Rectangle<float> (right - 300.f, logoTop + logoH, 300.f, 14.f),
+                juce::Justification::centredRight);
 }
 
 void VinylTracerEditor::resized()
