@@ -5,9 +5,10 @@
 <img width="640" alt="image" src="https://github.com/user-attachments/assets/64bdb228-0261-4450-9cb5-51c13218a4b4" />
 
 # Description
-Ableton Live などのDAWで、Serato CV02 / CV02.5 のタイムコードレコードを使い、プラグインに読み込んだサンプルをスクラッチ再生する VST3 / AU プラグインです。
+Ableton Live などのDAWで、Serato CV02 / CV02.5 のコントロール・ヴァイナルを使い、プラグインに読み込んだサンプルをスクラッチするための VST3 プラグインです。
+DAWで曲を作りながら、「あ、このフレーズ、スクラッチしたらどうなるだろう？」という思いつきを、すぐに試したい、そんな思いで開発しました。
 
-既存のプラグイン（SCRATCHabl、Ms. Pinky）で問題になっている次の3点を、設計の段階で避けることを目標にしています。
+既存のプラグインで問題になっている次の3点を、設計の段階で避けることを目標にしています。
 
 | 問題 | 原因の推定 | この実装での対策 |
 |---|---|---|
@@ -100,12 +101,14 @@ cmake --build build --config Release
 | Output | 出力ゲイン |
 | Timecode Thru | 入力のタイムコードをそのまま出力する（配線確認用） |
 | Loop | サンプルをループさせる |
+| Wave View | 波形のスクロールビューの表示幅 |
+| Cue | キューポイントの設定 |
 
 ## 実機WAVでの確認（おすすめ）
 
 プラグインを試す前に、実機の信号でも解析が動くかを確かめられます。
 
-1. JUMBLEQ経由でターンテーブルのタイムコードを録音します。48kHzのステレオWAVで、エフェクトなしにします。次の4種類を録っておくと便利です。
+1. ターンテーブルのタイムコードを録音します。48kHzのステレオWAVで、エフェクトなしにします。次の4種類を録っておくと便利です。
    - 通常の再生（30秒）
    - 低速で前後に動かす
    - 激しいスクラッチ
@@ -132,11 +135,11 @@ cmake --build build --config Release
 
 Vinyl Tracer は [GNU Affero General Public License v3.0](LICENSE.md)（またはそれ以降のバージョン、`AGPL-3.0-or-later`）で公開しています。`core/`・`plugin/`・`tests/`・`tools/` のすべてが対象です。
 
-- `core/` はサードパーティのコードを含みません（xwax などの GPL コードは使っていません）。
+- `core/` はサードパーティのコードを含みません。
 - プラグインは [JUCE](https://juce.com/) を AGPLv3 の条件で使っています。
 - VST3 SDK（JUCE に同梱）は MIT ライセンスです。
 - プラグインに埋め込んでいるフォント（`fonts/`）は、どちらも SIL Open Font License 1.1 です。
   - [Space Grotesk](https://github.com/floriankarsten/space-grotesk)（プラグイン名）：[fonts/OFL-SpaceGrotesk.txt](fonts/OFL-SpaceGrotesk.txt)
   - [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono)（そのほかの文字）：[fonts/OFL-JetBrainsMono.txt](fonts/OFL-JetBrainsMono.txt)
 
-Serato、CV02 は各社の商標です。Vinyl Tracer はこれらの会社とは関係がなく、対応するタイムコード盤を示すためだけに名前を使っています。
+Serato、CV02 はSerato社の商標です。Vinyl Tracer はこれらの会社とは関係がなく、対応するタイムコード盤を示すためだけに名前を使っています。
