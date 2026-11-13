@@ -10,6 +10,9 @@
   const ctx = canvas.getContext("2d");
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+  // Resolve the data file next to this script so pages in sub-folders (ja/) work too.
+  const dataUrl = new URL("assets/scope.bin", document.currentScript ? document.currentScript.src : location.href);
+
   const kCapacity = 1024; // points kept by ScopeView
   const kEdge = 1.4;      // guide circle = 1.4 x nominal level
 
@@ -87,7 +90,7 @@
   window.addEventListener("resize", resize);
   drawFrame(null, 0);
 
-  fetch("assets/scope.bin")
+  fetch(dataUrl)
     .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(r.status)))
     .then((buf) => {
       const view = new DataView(buf);

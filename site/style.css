@@ -99,7 +99,7 @@ img { max-width: 100%; height: auto; }
 }
 @media (max-width: 640px) {
   .wrap { padding: 0 16px; }
-  .nav nav a:not(.gh) { display: none; }
+  .nav nav a:not(.gh):not(.lang) { display: none; }
   .hero { padding: 48px 0 24px; }
   .section { padding: 64px 0; }
   .sp-hide { display: none; }

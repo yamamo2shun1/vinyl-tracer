@@ -1,15 +1,18 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Vinyl Tracer</title>
-<meta name="description" content="Serato の Control Vinyl（CV02 / CV02.5）で、プラグインに読み込んだ音源をスクラッチする VST3 / AU プラグイン。">
+<meta name="description" content="A VST3 / AU plugin for scratching any sound loaded into it with Serato Control Vinyl (CV02 / CV02.5).">
 <meta property="og:title" content="Vinyl Tracer">
-<meta property="og:description" content="Serato の Control Vinyl で、プラグインに読み込んだ音源をスクラッチ。VST3 / AU（Windows・macOS）。">
+<meta property="og:description" content="Scratch any sound loaded into the plugin with Serato Control Vinyl. VST3 / AU for Windows and macOS.">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0a0b">
 <link rel="icon" href="assets/vinyl-tracer-mark-dark.svg" type="image/svg+xml">
+<link rel="alternate" hreflang="ja" href="https://vinyl-tracer.jumbleq.io/ja/">
+<link rel="alternate" hreflang="en" href="https://vinyl-tracer.jumbleq.io/">
+<link rel="alternate" hreflang="x-default" href="https://vinyl-tracer.jumbleq.io/">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -18,8 +21,9 @@
   <div class="wrap nav-inner">
     <a class="brand" href="#top"><img src="assets/vinyl-tracer-mark-dark.svg" alt="" width="54" height="34">Vinyl Tracer</a>
     <nav>
-      <a href="#features">特長</a>
-      <a href="#download">ダウンロード</a>
+      <a href="#features">Features</a>
+      <a href="#download">Download</a>
+      <a href="ja/" class="lang" lang="ja" hreflang="ja">日本語</a>
       <a href="https://github.com/yamamo2shun1/vinyl-tracer" class="gh">GitHub</a>
     </nav>
   </div>
@@ -32,23 +36,23 @@
     <div class="hero-text">
       <p class="eyebrow">TIMECODE SCRATCH / VST3 · AU</p>
       <h1>Vinyl Tracer</h1>
-      <p class="lead">Serato の Control Vinyl で、<br class="sp-hide">プラグインに読み込んだ音源をスクラッチ。</p>
-      <p class="sub">DAW での曲作り中にひらめいた「このシンセの音、スクラッチしたい！」を、そのまま形にできるプラグイン。</p>
+      <p class="lead">Scratch any sound loaded into the plugin<br class="sp-hide"> with Serato Control Vinyl.</p>
+      <p class="sub">Making a track in your DAW and thinking “I want to scratch this synth!”? Vinyl Tracer turns that idea into a scratch on the spot.</p>
       <div class="cta">
-        <a class="btn primary" href="https://github.com/yamamo2shun1/vinyl-tracer/releases/latest">ダウンロード</a>
-        <a class="btn" href="https://github.com/yamamo2shun1/vinyl-tracer">ソースコード</a>
+        <a class="btn primary" href="https://github.com/yamamo2shun1/vinyl-tracer/releases/latest">Download</a>
+        <a class="btn" href="https://github.com/yamamo2shun1/vinyl-tracer">Source code</a>
       </div>
       <ul class="tags">
         <li>Windows 10 / 11 · VST3</li>
         <li>macOS 11+ · VST3 / AU</li>
         <li>Serato CV02 / CV02.5</li>
-        <li>オープンソース · AGPL-3.0</li>
+        <li>Open source · AGPL-3.0</li>
       </ul>
     </div>
     <figure class="scope">
       <canvas id="scope" width="360" height="360" aria-hidden="true"></canvas>
       <div class="scope-status" id="scope-status" aria-hidden="true">SIGNAL -- | CODE -- | ABS -- | speed 0.000x</div>
-      <figcaption>実際のレコードの録音を、プラグインと同じ方法で表示しています</figcaption>
+      <figcaption>A real record, recorded and drawn exactly the way the plugin draws it</figcaption>
     </figure>
   </div>
 </section>
@@ -56,29 +60,29 @@
 <section class="shot">
   <div class="wrap">
     <figure>
-      <img src="https://github.com/user-attachments/assets/64bdb228-0261-4450-9cb5-51c13218a4b4" alt="Vinyl Tracer のプラグイン画面。左にタイムコードのスコープ、中央に波形のスクロールビュー、下にパラメータとキューボタン。" loading="lazy">
+      <img src="https://github.com/user-attachments/assets/64bdb228-0261-4450-9cb5-51c13218a4b4" alt="The Vinyl Tracer plugin window: the timecode scope on the left, a scrolling waveform in the middle, and parameters and cue buttons along the bottom." loading="lazy">
     </figure>
   </div>
 </section>
 
 <section id="features" class="section">
   <div class="wrap">
-    <h2><span class="num">01</span>既存の類似プラグインに対する不満を改善</h2>
+    <h2><span class="num">01</span>Fixing the usual pain points</h2>
     <div class="cards">
       <article class="card">
-        <h3>徹底したドリフト対策</h3>
-        <p>速度を積算せず、搬送波の位相と LFSR の絶対位置から、レコードの位置を毎回直接求めます。誤差が溜まらないので、5分間の激しいスクラッチでもドリフトは 0.2 ms 以下。</p>
-        <p class="metric"><b>−0.17 ms</b> 5分後のドリフト</p>
+        <h3>No drift, by design</h3>
+        <p>Instead of adding up speed, Vinyl Tracer reads the record position directly from the carrier phase and the absolute LFSR position every time. Errors never pile up, so even after five minutes of hard scratching, drift stays under 0.2 ms.</p>
+        <p class="metric"><b>−0.17 ms</b> drift after 5 minutes</p>
       </article>
       <article class="card">
-        <h3>低速域での追従性</h3>
-        <p>ゼロクロスを待たずに、L/R の位相を毎サンプル測って3次 PLL で追従します。レコードが 0.01 倍速で動いていても、音は止まりません。</p>
-        <p class="metric"><b>100 %</b> 0.01x での追従率</p>
+        <h3>Tracks the slowest moves</h3>
+        <p>No waiting for zero crossings: the L/R phase is measured on every sample and followed by a third-order PLL. Even with the record moving at 0.01x, the sound never stops.</p>
+        <p class="metric"><b>100 %</b> tracking at 0.01x</p>
       </article>
       <article class="card">
-        <h3>CPU 負荷の軽減</h3>
-        <p>解析と再生は依存ライブラリなしの C++17。1デッキ・48 kHz で、解析と再生を合わせて 1 コアの約 0.5 % です。</p>
-        <p class="metric"><b>0.5 %</b> 1コアあたりの負荷</p>
+        <h3>Low CPU load</h3>
+        <p>Analysis and playback are plain C++17 with no external libraries. One deck at 48 kHz uses about 0.5 % of a single core for both together.</p>
+        <p class="metric"><b>0.5 %</b> of one CPU core</p>
       </article>
     </div>
   </div>
@@ -86,44 +90,44 @@
 
 <section id="more" class="section alt">
   <div class="wrap">
-    <h2><span class="num">02</span>その他の特徴</h2>
+    <h2><span class="num">02</span>More features</h2>
     <div class="cards">
       <article class="card">
-        <h3>キャリブレーションの自動化</h3>
-        <p>DJ ソフトウェアでは必須のタイムコードのキャリブレーションを自動化し、調整を容易にしました。また、L/R の入れ替えや極性の反転にも自動で対応。</p>
+        <h3>Automatic calibration</h3>
+        <p>Timecode calibration, a must in DJ software, happens automatically, so there is nothing to tweak. Swapped L/R channels and reversed polarity are handled automatically too.</p>
       </article>
       <article class="card">
-        <h3>キューポイント</h3>
-        <p>DJ でおなじみの機能を搭載。長い音源でも、好きな位置からすぐにスクラッチできます。</p>
+        <h3>Cue points</h3>
+        <p>The DJ staple, built in. Even in a long sound, jump to any spot and start scratching right away.</p>
       </article>
       <article class="card">
-        <h3>オープンソース</h3>
-        <p>ソースコードは GitHub ですべて公開しています。あなたのアイデアを AI とともに実現させることも可能です。</p>
+        <h3>Open source</h3>
+        <p>All of the source code is public on GitHub. You can even bring your own ideas to life with the help of AI.</p>
       </article>
     </div>
-    <p class="note">バッファサイズは 64〜128 サンプルがおすすめです（遅延はほぼバッファサイズで決まります）。</p>
+    <p class="note">A buffer size of 64–128 samples is recommended (latency is mostly set by the buffer size).</p>
   </div>
 </section>
 
 <section id="download" class="section">
   <div class="wrap">
-    <h2><span class="num">03</span>ダウンロード</h2>
+    <h2><span class="num">03</span>Download</h2>
     <div class="dl">
       <div class="dl-item">
         <h3>Windows</h3>
-        <p>Windows 10 / 11（64 ビット）<br>VST3（ZIP）</p>
+        <p>Windows 10 / 11 (64-bit)<br>VST3 (ZIP)</p>
       </div>
       <div class="dl-item">
         <h3>macOS</h3>
-        <p>macOS 11 以降（Apple シリコン / Intel）<br>VST3 / AU（署名・公証済みの .pkg）</p>
+        <p>macOS 11 or later (Apple silicon / Intel)<br>VST3 / AU (signed and notarized .pkg)</p>
       </div>
     </div>
-    <p class="req"><b>必要な機材</b>　Serato Control Vinyl、ターンテーブル、USB オーディオ I/F もしくは USB 機能を搭載する DJ ミキサー</p>
+    <p class="req"><b>What you need:</b> Serato Control Vinyl, a turntable, and a USB audio interface or a DJ mixer with built-in USB audio</p>
     <div class="cta">
-      <a class="btn primary" href="https://github.com/yamamo2shun1/vinyl-tracer/releases/latest">最新版をダウンロード（GitHub Releases）</a>
-      <a class="btn" href="https://github.com/yamamo2shun1/vinyl-tracer/blob/main/INSTALL.md">インストール方法</a>
+      <a class="btn primary" href="https://github.com/yamamo2shun1/vinyl-tracer/releases/latest">Download the latest version (GitHub Releases)</a>
+      <a class="btn" href="https://github.com/yamamo2shun1/vinyl-tracer/blob/main/INSTALL.md">Installation guide</a>
     </div>
-    <p class="note">動作確認：Windows 11 ＋ Ableton Live 12、macOS 26 ＋ Ableton Live 12。</p>
+    <p class="note">Tested on Windows 11 + Ableton Live 12 and macOS 26 + Ableton Live 12.</p>
   </div>
 </section>
 
@@ -131,8 +135,8 @@
 
 <footer class="footer">
   <div class="wrap">
-    <p>Vinyl Tracer は <a href="https://github.com/yamamo2shun1/vinyl-tracer/blob/main/LICENSE.md">GNU AGPL v3.0 以降</a>で公開しています。開発には <a href="https://juce.com/">JUCE</a> を、フォントには <a href="https://github.com/floriankarsten/space-grotesk">Space Grotesk</a> と <a href="https://github.com/JetBrains/JetBrainsMono">JetBrains Mono</a>（SIL OFL 1.1）を使用しています。</p>
-    <p>Serato は Serato 社の商標です。Vinyl Tracer は同社とは関係がなく、対応するレコードを示すためだけに名前を使っています。</p>
+    <p>Vinyl Tracer is released under the <a href="https://github.com/yamamo2shun1/vinyl-tracer/blob/main/LICENSE.md">GNU AGPL v3.0 or later</a>. Built with <a href="https://juce.com/">JUCE</a>, set in <a href="https://github.com/floriankarsten/space-grotesk">Space Grotesk</a> and <a href="https://github.com/JetBrains/JetBrainsMono">JetBrains Mono</a> (SIL OFL 1.1).</p>
+    <p>Serato is a trademark of Serato. Vinyl Tracer is not affiliated with Serato; the name is used only to identify compatible records.</p>
     <p class="copy">© 2026 Shunichi Yamamoto / Yamamoto Works</p>
   </div>
 </footer>

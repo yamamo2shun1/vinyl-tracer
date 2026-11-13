@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vinyl Tracer</title>
+<meta name="description" content="Serato の Control Vinyl（CV02 / CV02.5）で、プラグインに読み込んだ音源をスクラッチする VST3 / AU プラグイン。">
+<meta property="og:title" content="Vinyl Tracer">
+<meta property="og:description" content="Serato の Control Vinyl で、プラグインに読み込んだ音源をスクラッチ。VST3 / AU（Windows・macOS）。">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#0a0a0b">
+<link rel="icon" href="../assets/vinyl-tracer-mark-dark.svg" type="image/svg+xml">
+<link rel="alternate" hreflang="ja" href="https://vinyl-tracer.jumbleq.io/ja/">
+<link rel="alternate" hreflang="en" href="https://vinyl-tracer.jumbleq.io/">
+<link rel="alternate" hreflang="x-default" href="https://vinyl-tracer.jumbleq.io/">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top"><img src="../assets/vinyl-tracer-mark-dark.svg" alt="" width="54" height="34">Vinyl Tracer</a>
+    <nav>
+      <a href="#features">特長</a>
+      <a href="#download">ダウンロード</a>
+      <a href="../" class="lang" lang="en" hreflang="en">EN</a>
+      <a href="https://github.com/yamamo2shun1/vinyl-tracer" class="gh">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+
+<section class="hero">
+  <div class="wrap hero-inner">
+    <div class="hero-text">
+      <p class="eyebrow">TIMECODE SCRATCH / VST3 · AU</p>
+      <h1>Vinyl Tracer</h1>
+      <p class="lead">Serato の Control Vinyl で、<br class="sp-hide">プラグインに読み込んだ音源をスクラッチ。</p>
+      <p class="sub">DAW での曲作り中にひらめいた「このシンセの音、スクラッチしたい！」を、そのまま形にできるプラグイン。</p>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/yamamo2shun1/vinyl-tracer/releases/latest">ダウンロード</a>
+        <a class="btn" href="https://github.com/yamamo2shun1/vinyl-tracer">ソースコード</a>
+      </div>
+      <ul class="tags">
+        <li>Windows 10 / 11 · VST3</li>
+        <li>macOS 11+ · VST3 / AU</li>
+        <li>Serato CV02 / CV02.5</li>
+        <li>オープンソース · AGPL-3.0</li>
+      </ul>
+    </div>
+    <figure class="scope">
+      <canvas id="scope" width="360" height="360" aria-hidden="true"></canvas>
+      <div class="scope-status" id="scope-status" aria-hidden="true">SIGNAL -- | CODE -- | ABS -- | speed 0.000x</div>
+      <figcaption>実際のレコードの録音を、プラグインと同じ方法で表示しています</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="shot">
+  <div class="wrap">
+    <figure>
+      <img src="https://github.com/user-attachments/assets/64bdb228-0261-4450-9cb5-51c13218a4b4" alt="Vinyl Tracer のプラグイン画面。左にタイムコードのスコープ、中央に波形のスクロールビュー、下にパラメータとキューボタン。" loading="lazy">
+    </figure>
+  </div>
+</section>
+
+<section id="features" class="section">
+  <div class="wrap">
+    <h2><span class="num">01</span>既存の類似プラグインに対する不満を改善</h2>
+    <div class="cards">
+      <article class="card">
+        <h3>徹底したドリフト対策</h3>
+        <p>速度を積算せず、搬送波の位相と LFSR の絶対位置から、レコードの位置を毎回直接求めます。誤差が溜まらないので、5分間の激しいスクラッチでもドリフトは 0.2 ms 以下。</p>
+        <p class="metric"><b>−0.17 ms</b> 5分後のドリフト</p>
+      </article>
+      <article class="card">
+        <h3>低速域での追従性</h3>
+        <p>ゼロクロスを待たずに、L/R の位相を毎サンプル測って3次 PLL で追従します。レコードが 0.01 倍速で動いていても、音は止まりません。</p>
+        <p class="metric"><b>100 %</b> 0.01x での追従率</p>
+      </article>
+      <article class="card">
+        <h3>CPU 負荷の軽減</h3>
+        <p>解析と再生は依存ライブラリなしの C++17。1デッキ・48 kHz で、解析と再生を合わせて 1 コアの約 0.5 % です。</p>
+        <p class="metric"><b>0.5 %</b> 1コアあたりの負荷</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="more" class="section alt">
+  <div class="wrap">
+    <h2><span class="num">02</span>その他の特徴</h2>
+    <div class="cards">
+      <article class="card">
+        <h3>キャリブレーションの自動化</h3>
+        <p>DJ ソフトウェアでは必須のタイムコードのキャリブレーションを自動化し、調整を容易にしました。また、L/R の入れ替えや極性の反転にも自動で対応。</p>
+      </article>
+      <article class="card">
+        <h3>キューポイント</h3>
+        <p>DJ でおなじみの機能を搭載。長い音源でも、好きな位置からすぐにスクラッチできます。</p>
+      </article>
+      <article class="card">
+        <h3>オープンソース</h3>
+        <p>ソースコードは GitHub ですべて公開しています。あなたのアイデアを AI とともに実現させることも可能です。</p>
+      </article>
+    </div>
+    <p class="note">バッファサイズは 64〜128 サンプルがおすすめです（遅延はほぼバッファサイズで決まります）。</p>
+  </div>
+</section>
+
+<section id="download" class="section">
+  <div class="wrap">
+    <h2><span class="num">03</span>ダウンロード</h2>
+    <div class="dl">
+      <div class="dl-item">
+        <h3>Windows</h3>
+        <p>Windows 10 / 11（64 ビット）<br>VST3（ZIP）</p>
+      </div>
+      <div class="dl-item">
+        <h3>macOS</h3>
+        <p>macOS 11 以降（Apple シリコン / Intel）<br>VST3 / AU（署名・公証済みの .pkg）</p>
+      </div>
+    </div>
+    <p class="req"><b>必要な機材</b>　Serato Control Vinyl、ターンテーブル、USB オーディオ I/F もしくは USB 機能を搭載する DJ ミキサー</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/yamamo2shun1/vinyl-tracer/releases/latest">最新版をダウンロード（GitHub Releases）</a>
+      <a class="btn" href="https://github.com/yamamo2shun1/vinyl-tracer/blob/main/INSTALL.md">インストール方法</a>
+    </div>
+    <p class="note">動作確認：Windows 11 ＋ Ableton Live 12、macOS 26 ＋ Ableton Live 12。</p>
+  </div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap">
+    <p>Vinyl Tracer は <a href="https://github.com/yamamo2shun1/vinyl-tracer/blob/main/LICENSE.md">GNU AGPL v3.0 以降</a>で公開しています。開発には <a href="https://juce.com/">JUCE</a> を、フォントには <a href="https://github.com/floriankarsten/space-grotesk">Space Grotesk</a> と <a href="https://github.com/JetBrains/JetBrainsMono">JetBrains Mono</a>（SIL OFL 1.1）を使用しています。</p>
+    <p>Serato は Serato 社の商標です。Vinyl Tracer は同社とは関係がなく、対応するレコードを示すためだけに名前を使っています。</p>
+    <p class="copy">© 2026 Shunichi Yamamoto / Yamamoto Works</p>
+  </div>
+</footer>
+
+<script src="../scope.js"></script>
+</body>
+</html>
