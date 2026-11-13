@@ -5,7 +5,12 @@
 <img width="640" alt="image" src="https://github.com/user-attachments/assets/64bdb228-0261-4450-9cb5-51c13218a4b4" />
 
 ## Description
-Ableton Live などのDAWで、Serato CV02 / CV02.5 のコントロール・ヴァイナルを使い、プラグインに読み込んだサンプルをスクラッチするための VST3 プラグインです。
+Ableton Live などのDAWで、Serato CV02 / CV02.5 のコントロール・ヴァイナルを使い、プラグインに読み込んだサンプルをスクラッチするための VST3 / Audio Unit（AU）プラグインです。
+
+- **Windows**（10 / 11、64ビット）：VST3
+- **macOS**（11 以降、Apple シリコン / Intel）：VST3 / AU（署名・公証済みのインストーラ）
+
+配布版は [Releases](https://github.com/yamamo2shun1/vinyl-tracer/releases) からダウンロードできます。インストールの方法は [INSTALL.md](INSTALL.md) を見てください。
 
 DAWで曲を作りながら、「あ、このフレーズ、スクラッチしたらどうなるだろう？」という思いつきを、すぐに試したい、そんな思いで開発しました。
 
@@ -27,6 +32,7 @@ core/      解析と再生の本体（JUCEに依存しない C++17）
 plugin/    JUCE のプラグイン層（Processor / Editor）
 tests/     合成タイムコードによる精度テスト
 tools/     tc_analyze：実機で録音したWAVを解析するコマンド
+           macos_sign_notarize.sh / macos_package.sh：macOS 版の署名・公証と .pkg の作成
 docs/      テスト結果
 ```
 
@@ -78,6 +84,8 @@ cmake --build build --config Release
   - macOSは `~/Library/Audio/Plug-Ins/VST3/` へコピーします。
   - Windowsは `C:\Program Files\Common Files\VST3\` へコピーします。
 - macOSではAU（`.component`）もできます。
+  - 配布用のユニバーサルバイナリ（Apple シリコン＋Intel）は、`-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0` を付けて `build-mac` にビルドします。
+  - 署名・公証は `tools/macos_sign_notarize.sh`、インストーラ（.pkg）の作成は `tools/macos_package.sh` で行います。Apple Developer Program の Developer ID 証明書が必要です（使い方は各スクリプトの先頭を参照）。
 - テストとツールだけをビルドする場合は `-DVT_BUILD_PLUGIN=OFF` を付けます（JUCE不要）。
 
 ## Ableton Live での使い方
