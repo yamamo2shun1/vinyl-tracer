@@ -1,5 +1,10 @@
-# Vinyl Tracer (v0.5.0)
+# Vinyl Tracer
+<img width="360" alt="vinyl-tracer-logo" src="https://github.com/user-attachments/assets/45076452-736b-4173-b864-8e0acde0948c" />
 
+# Screenshot
+<img width="640" alt="image" src="https://github.com/user-attachments/assets/64bdb228-0261-4450-9cb5-51c13218a4b4" />
+
+# Description
 Ableton Live などのDAWで、Serato CV02 / CV02.5 のタイムコードレコードを使い、プラグインに読み込んだサンプルをスクラッチ再生する VST3 / AU プラグインです。
 
 既存のプラグイン（SCRATCHabl、Ms. Pinky）で問題になっている次の3点を、設計の段階で避けることを目標にしています。
