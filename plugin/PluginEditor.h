@@ -82,6 +82,23 @@ private:
     juce::String name;
 };
 
+// Diagnostics strip: the last few seconds (wall-clock time, now at the right)
+// of the decoded speed, the phase loop's mean |residual| and the centre offset
+// of the L/R path, to see what the stylus does when the output sounds rough.
+class DiagView : public juce::Component
+{
+public:
+    void push (const VinylTracerProcessor::DiagFrame* frames, int n);
+    void setSpanSeconds (double s) { spanSeconds = s; }
+    void paint (juce::Graphics&) override;
+
+private:
+    static constexpr int capacity = 16384; // frames (1 ms each)
+    std::vector<VinylTracerProcessor::DiagFrame> hist = std::vector<VinylTracerProcessor::DiagFrame> (capacity);
+    int64_t total = 0;      // frames pushed so far
+    double spanSeconds = 2.0;
+};
+
 // Colours for the standard widgets: black base, yellow accent.
 class VtLookAndFeel : public juce::LookAndFeel_V4
 {
@@ -115,6 +132,7 @@ private:
     VtLookAndFeel lnf; // declared before the widgets so it outlives them
 
     juce::TextButton loadButton { "Load Sample..." };
+    juce::ToggleButton diagButton { "Diagnostics" };
     std::array<juce::TextButton, VinylTracerProcessor::kNumCues> cueButtons;
     juce::Label      cueLabel;
     std::array<double, VinylTracerProcessor::kNumCues> shownCues {};
@@ -139,6 +157,9 @@ private:
     ScopeView  scope;
     LevelMeter meter;
     WaveView   wave;
+    DiagView   diag;
+    std::vector<VinylTracerProcessor::DiagFrame> diagBuf = std::vector<VinylTracerProcessor::DiagFrame> (4096);
+    void updateDiagnosticsVisibility();
     std::unique_ptr<juce::FileChooser> chooser;
     const vt::SampleData* shownSample = nullptr;
     std::vector<float> scopeBuf = std::vector<float> (4096 * 2);

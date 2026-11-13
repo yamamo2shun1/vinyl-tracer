@@ -83,6 +83,11 @@ void VinylTracerProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     posRel.assign (n, 0.0);
     vinyl.assign (n, 0.0);
     quality.assign (n, 1.f);
+    speedBuf.assign (n, 0.f);
+    lockErrBuf.assign (n, 0.f);
+    offsetBuf.assign (n, 0.f);
+    diagFrameLen = juce::jmax (1, juce::roundToInt (sampleRate / 1000.0));
+    diagCount = diagOpen = 0;
     lastMode = -1;
 }
 
@@ -137,7 +142,32 @@ void VinylTracerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         const int n = juce::jmin (chunkMax, numSamples - offset);
 
         // 1. decode (reads the input before the output overwrites it)
-        decoder.process (inL + offset, inR + offset, n, posAbs.data(), posRel.data(), nullptr, quality.data());
+        decoder.process (inL + offset, inR + offset, n, posAbs.data(), posRel.data(), speedBuf.data(), quality.data(),
+                         lockErrBuf.data(), offsetBuf.data());
+
+        // diagnostics: 1 ms frames for the editor (dropped while it does not read them)
+        for (int i = 0; i < n; ++i)
+        {
+            const float v = speedBuf[size_t (i)], e = lockErrBuf[size_t (i)], o = offsetBuf[size_t (i)];
+            if (diagCount == 0)
+                diagAcc = { v, v, e, 0.f, 0.f };
+            diagAcc.vMin = juce::jmin (diagAcc.vMin, v);
+            diagAcc.vMax = juce::jmax (diagAcc.vMax, v);
+            diagAcc.lockErr = juce::jmax (diagAcc.lockErr, e);
+            if (o >= 0.f) { diagAcc.offset = juce::jmax (diagAcc.offset, o); ++diagOpen; }
+            if (++diagCount >= diagFrameLen)
+            {
+                diagAcc.open = float (diagOpen) / float (diagCount);
+                int s1, n1, s2, n2;
+                diagFifo.prepareToWrite (1, s1, n1, s2, n2);
+                if (n1 + n2 > 0)
+                {
+                    diagData[size_t (n1 > 0 ? s1 : s2)] = diagAcc;
+                    diagFifo.finishedWrite (1);
+                }
+                diagCount = diagOpen = 0;
+            }
+        }
 
         // scope: raw input, normalised to the tracked nominal level
         {
@@ -271,6 +301,17 @@ int VinylTracerProcessor::readScope (float* xy, int maxPoints) noexcept
     return k;
 }
 
+int VinylTracerProcessor::readDiagnostics (DiagFrame* out, int maxFrames) noexcept
+{
+    int s1, n1, s2, n2;
+    diagFifo.prepareToRead (maxFrames, s1, n1, s2, n2);
+    int k = 0;
+    for (int i = 0; i < n1; ++i) out[k++] = diagData[size_t (s1 + i)];
+    for (int i = 0; i < n2; ++i) out[k++] = diagData[size_t (s2 + i)];
+    diagFifo.finishedRead (n1 + n2);
+    return k;
+}
+
 //==============================================================================
 bool VinylTracerProcessor::loadSample (const juce::File& file, juce::String& error)
 {
@@ -330,6 +371,7 @@ void VinylTracerProcessor::getStateInformation (juce::MemoryBlock& destData)
             state.setProperty ("cuePoint" + juce::String (i + 1), t, nullptr);
     }
     state.setProperty ("waveViewSeconds", waveViewSeconds.load(), nullptr);
+    state.setProperty ("showDiagnostics", showDiagnostics.load(), nullptr);
     state.setProperty ("config", savedConfig.load(), nullptr);
     if (savedNominalDb.load() > kNoNominal)
         state.setProperty ("nominalDb", savedNominalDb.load(), nullptr);
@@ -349,6 +391,7 @@ void VinylTracerProcessor::setStateInformation (const void* data, int sizeInByte
     cueCycles.store (double (state.getProperty ("cueCycles", 0.0)));
     cueValid.store (bool (state.getProperty ("cueValid", false)));
     setWaveViewSeconds (int (state.getProperty ("waveViewSeconds", 2)));
+    showDiagnostics.store (bool (state.getProperty ("showDiagnostics", false)));
     const int cfg = int (state.getProperty ("config", -1));
     savedConfig.store (cfg);
     if (cfg >= 0)

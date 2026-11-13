@@ -77,6 +77,7 @@ void TimecodeDecoder::prepare (double sampleRate)
     kCal_  = onePole (sr_, 0.5);
     kRef_  = onePole (sr_, 1.0);
     kEnv_  = onePole (sr_, 0.003);
+    kCentre_ = onePole (sr_, 0.005);
     kPeak_ = float (std::exp (-1.0 / (0.3 * sr_)));
     coast_ = std::exp (-1.0 / (0.010 * sr_));
     lastLoopSpeed_ = -1.0;
@@ -103,6 +104,7 @@ void TimecodeDecoder::reset()
     dcL_ = dcR_ = 0.0;
     eLL_ = eRR_ = 1e-9; eLR_ = 0.0;
     env_ = 0.0;
+    cenL_ = cenR_ = 0.0;
     shortPow_ = 0.0; noiseFloor_ = 1e-7; gateMag_ = gatePow_ = 0.0;
     X_ = V_ = A_ = lockErr_ = relShift_ = relCorr_ = relCorrTarget_ = 0.0;
     slowSpeed_ = 0.0;
@@ -158,7 +160,8 @@ void TimecodeDecoder::updateLoopGains (double absSpeed) noexcept
 }
 
 void TimecodeDecoder::process (const float* left, const float* right, int numSamples,
-                               double* posAbs, double* posRel, float* speed, float* quality) noexcept
+                               double* posAbs, double* posRel, float* speed, float* quality,
+                               float* lockError, float* centreOffset) noexcept
 {
     const double speedScale = (table_ != nullptr) ? sr_ * 0.5 / table_->def().resolution
                                                   : sr_ * 0.5 / 1000.0;
@@ -176,6 +179,12 @@ void TimecodeDecoder::process (const float* left, const float* right, int numSam
         // is unknown there; the player turns the level down instead.
         if (quality != nullptr)
             quality[i] = float (1.0 - std::clamp ((lockErr_ - kRoughLow) / (kRoughHigh - kRoughLow), 0.0, 1.0));
+        // diagnostics
+        if (lockError != nullptr)
+            lockError[i] = float (lockErr_);
+        if (centreOffset != nullptr)
+            centreOffset[i] = gateOpen_ ? float (std::sqrt (cenL_ * cenL_ + cenR_ * cenR_) / std::max (env_, 1e-12))
+                                        : -1.f;
     }
 
     const double rel = double (dirSign_) * X_ * 0.5 + relShift_;
@@ -246,6 +255,13 @@ void TimecodeDecoder::processSample (float xl, float xr) noexcept
     const double r = (r0 * gainR - rho * l0) * invSk;
     const double mag = std::sqrt (l * l + r * r);
     env_ += kEnv_ * (mag - env_);
+
+    // Centre of the L/R path, for the diagnostics only (the tracker does not
+    // use it): a ~30 Hz low-pass of the calibrated pair. A stylus pushed
+    // sideways or shaken moves the whole path off the origin at a few to a
+    // few tens of Hz; a carrier above ~0.3x is well above the cut-off.
+    cenL_ += kCentre_ * (l - cenL_);
+    cenR_ += kCentre_ * (r - cenR_);
 
     status_.scopeL = float (l / std::max (refAmp_, 1e-6));
     status_.scopeR = float (r / std::max (refAmp_, 1e-6));
