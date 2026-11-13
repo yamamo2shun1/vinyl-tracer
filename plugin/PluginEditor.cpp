@@ -16,6 +16,9 @@ const juce::Colour kAccent  { 0xffffcc00 };
 const juce::Colour kWarn    { 0xffff5a36 };
 const juce::Colour kText    { 0xffececec };
 const juce::Colour kDim     { 0xff8a8a90 };
+// Input level meter zones
+const juce::Colour kMeterOk  { 0xff3ddc97 };
+const juce::Colour kMeterHot { 0xffff9a3d };
 // Cue point colours (buttons and waveform markers); none is the accent yellow
 const juce::Colour kCueColours[VinylTracerProcessor::kNumCues] {
     juce::Colour (0xffff5c5c), juce::Colour (0xff4da3ff), juce::Colour (0xff3ddc97), juce::Colour (0xffd36bff),
@@ -137,6 +140,7 @@ private:
     std::unique_ptr<juce::Image::BitmapData> bd;
 };
 
+constexpr int   kTimerHz    = 60;   // editor refresh rate
 constexpr float kWaveHeight = 0.8f; // waveform height relative to its area (margin above / below)
 
 bool sameCue (double a, double b) { return (std::isnan (a) && std::isnan (b)) || a == b; }
@@ -197,6 +201,96 @@ void ScopeView::paint (juce::Graphics& g)
     g.setColour (kDim);
     g.setFont (juce::Font (juce::FontOptions (11.f)));
     g.drawText ("L / R", r.reduced (6.f), juce::Justification::topLeft);
+}
+
+//==============================================================================
+namespace
+{
+constexpr float kMeterFloorDb = -60.f;
+constexpr float kClipDb       = -0.3f;  // at or above: clip lamp
+constexpr float kHotDb        = -3.f;   // at or above: close to clipping
+constexpr float kMeterFallDbS = 24.f;   // bar fall rate (dB/s)
+constexpr double kHoldSeconds = 1.5;
+constexpr double kClipSeconds = 2.0;
+}
+
+void LevelMeter::update (float peakL, float peakR, float nominalDb, float gateDb, double dt)
+{
+    const float peaks[2] { peakL, peakR };
+    for (size_t ch = 0; ch < 2; ++ch)
+    {
+        const float db = juce::Decibels::gainToDecibels (peaks[ch], -120.f);
+        levelDb[ch] = juce::jmax (db, levelDb[ch] - kMeterFallDbS * float (dt));
+        if (db >= holdDb[ch]) { holdDb[ch] = db; holdAge[ch] = 0.0; }
+        else if ((holdAge[ch] += dt) > kHoldSeconds) holdDb[ch] = levelDb[ch];
+        clipAge[ch] = db >= kClipDb ? 0.0 : clipAge[ch] + dt;
+    }
+    nominal = nominalDb;
+    gate = gateDb;
+    repaint();
+}
+
+void LevelMeter::paint (juce::Graphics& g)
+{
+    auto r = getLocalBounds().toFloat();
+    g.setColour (kPanel);
+    g.fillRoundedRectangle (r, 4.f);
+
+    auto inner = r.reduced (2.f);
+    auto lamps = inner.removeFromTop (6.f);
+    inner.removeFromTop (2.f);
+    const float colW = (inner.getWidth() - 1.f) / 2.f;
+    auto yOf = [&] (float db)
+    {
+        const float t = juce::jlimit (0.f, 1.f, (db - kMeterFloorDb) / -kMeterFloorDb);
+        return inner.getBottom() - t * inner.getHeight();
+    };
+    // The bar's colour tells where its top is: below the gate (too low, no
+    // signal), in range, close to clipping, clipping.
+    auto zoneColour = [this] (float db)
+    {
+        if (db >= kClipDb) return kWarn;
+        if (db >= kHotDb)  return kMeterHot;
+        if (db >= gate)    return kMeterOk;
+        return kOutline.brighter (0.4f);
+    };
+
+    for (size_t ch = 0; ch < 2; ++ch)
+    {
+        const float x = inner.getX() + float (ch) * (colW + 1.f);
+        // clip lamp
+        g.setColour (clipAge[ch] < kClipSeconds ? kWarn : kRaised);
+        g.fillRect (x, lamps.getY(), colW, lamps.getHeight());
+        // track and bar
+        g.setColour (kRaised);
+        g.fillRect (x, inner.getY(), colW, inner.getHeight());
+        const float y = yOf (levelDb[ch]);
+        g.setColour (zoneColour (levelDb[ch]));
+        g.fillRect (x, y, colW, inner.getBottom() - y);
+        // peak hold
+        if (holdDb[ch] > kMeterFloorDb)
+        {
+            g.setColour (zoneColour (holdDb[ch]).brighter (0.3f));
+            g.fillRect (x, yOf (holdDb[ch]) - 0.5f, colW, 1.f);
+        }
+    }
+
+    // scale ticks every 12 dB
+    g.setColour (kBg.withAlpha (0.7f));
+    for (float db = -12.f; db > kMeterFloorDb; db -= 12.f)
+        g.fillRect (inner.getX(), yOf (db) - 0.5f, inner.getWidth(), 1.f);
+
+    // gate (dim) and nominal level (accent) across both bars
+    if (gate > kMeterFloorDb)
+    {
+        g.setColour (kDim);
+        g.fillRect (r.getX(), yOf (gate) - 0.5f, r.getWidth(), 1.f);
+    }
+    if (nominal > kMeterFloorDb)
+    {
+        g.setColour (kAccent);
+        g.fillRect (r.getX(), yOf (nominal) - 0.75f, r.getWidth(), 1.5f);
+    }
 }
 
 //==============================================================================
@@ -578,10 +672,11 @@ VinylTracerEditor::VinylTracerEditor (VinylTracerProcessor& p)
     addAndMakeVisible (levelLabel);
 
     addAndMakeVisible (scope);
+    addAndMakeVisible (meter);
     addAndMakeVisible (wave);
 
     setSize (780, 434);
-    startTimerHz (60); // smooth scrolling of the waveform
+    startTimerHz (kTimerHz); // smooth scrolling of the waveform
 }
 
 VinylTracerEditor::~VinylTracerEditor()
@@ -706,7 +801,12 @@ void VinylTracerEditor::resized()
     // the L / R scope ends level with the waveform, the level and status text below both
     const int viewH = bottom.getHeight() - 48 - 6;
     auto left = bottom.removeFromLeft (220);
-    scope.setBounds (left.removeFromTop (viewH));
+    {
+        auto views = left.removeFromTop (viewH);
+        meter.setBounds (views.removeFromLeft (14)); // input level, left of the L / R scope
+        views.removeFromLeft (6);
+        scope.setBounds (views);
+    }
     left.removeFromTop (6);
     levelLabel.setBounds (left.removeFromTop (40));
 
@@ -735,6 +835,7 @@ void VinylTracerEditor::timerCallback()
     updateCueButtons(); // also picks up cue points restored with a Live set
 
     const auto st = proc.getStatus();
+    meter.update (proc.takeInputPeak (0), proc.takeInputPeak (1), st.refDb, st.gateDb, 1.0 / kTimerHz);
     wave.setLoop (loopButton.getToggleState());
     {
         const int span = proc.getWaveViewSeconds();

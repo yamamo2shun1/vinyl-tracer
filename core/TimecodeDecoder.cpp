@@ -185,6 +185,7 @@ void TimecodeDecoder::process (const float* left, const float* right, int numSam
     status_.speed     = double (dirSign_) * V_ * speedScale;
     status_.levelDb   = 20.f * std::log10 (std::max (peak_, 1e-6f));
     status_.refDb     = float (20.0 * std::log10 (std::max (refAmp_, 1e-6)));
+    status_.gateDb    = float (20.0 * std::log10 (std::max (std::max (refAmp_ * gateLin_, noiseFloor_ * kNfMargin), 1e-6)));
     status_.refLearned = refLearnSamples_ >= refLearnNeeded_;
     status_.config    = selected_;
     status_.reanchors = reanchors_;
