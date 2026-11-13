@@ -90,9 +90,23 @@ int main (int argc, char** argv)
 {
     if (argc < 2)
     {
-        std::printf ("usage: tc_analyze input.wav [--side A|B] [--gate dB] [--csv out.csv] [--block N] [--window t0 t1]...\n");
+        std::printf ("usage: tc_analyze input.wav [--side A|B] [--gate dB] [--csv out.csv] [--block N] [--window t0 t1]...\n"
+                     "                  [--nominal dB] [--scope out.bin t0 t1]\n");
         return 1;
     }
+    // --nominal dB: start from a learned nominal level, as the plugin does
+    // with the value saved in its state.
+    // --scope out.bin t0 t1: write what the plugin's L / R scope shows for
+    // that span (used for the web site's scope animation). Points as in the
+    // plugin: raw input normalised to the nominal level, every 2nd sample,
+    // pulled in to 1.4 x nominal. Little-endian:
+    //   "VTS1", u32 point rate, u32 points, u32 status rate (100 Hz), u32 statuses,
+    //   i8 x/y pairs (127 = 1.4 x nominal),
+    //   per status: i16 speed x 1000, u8 flags (1 signal, 2 code lock, 4 anchored), u8 0
+    const char* scopePath = nullptr;
+    double scopeT0 = 0, scopeT1 = 0;
+    float nominal = 0.f;
+    bool haveNominal = false;
     // --window t0 t1: report how far the output position moved in that span
     // (e.g. a stretch where the record stood still) and its largest step.
     struct Window { double t0, t1, lo = 1e300, hi = -1e300, step = 0; };
@@ -115,6 +129,13 @@ int main (int argc, char** argv)
             w.t1 = std::atof (argv[++i]);
             windows.push_back (w);
         }
+        else if (! std::strcmp (argv[i], "--nominal") && i + 1 < argc) { nominal = float (std::atof (argv[++i])); haveNominal = true; }
+        else if (! std::strcmp (argv[i], "--scope") && i + 3 < argc)
+        {
+            scopePath = argv[++i];
+            scopeT0 = std::atof (argv[++i]);
+            scopeT1 = std::atof (argv[++i]);
+        }
     }
 
     std::vector<float> L, R;
@@ -127,6 +148,12 @@ int main (int argc, char** argv)
     dec.prepare (sr);
     dec.setTable (&table);
     dec.setGateDb (gate);
+    if (haveNominal) dec.setNominalDb (nominal);
+
+    std::vector<int8_t> scopePts;
+    std::vector<uint8_t> scopeStatus;
+    int scopeDecim = 0;
+    double nextStatus = scopeT0;
 
     const size_t N = L.size();
     std::vector<double> pos (static_cast<size_t> (block)), rel (static_cast<size_t> (block));
@@ -169,6 +196,38 @@ int main (int argc, char** argv)
             r2 = r1; r1 = r0; ++seen;
         }
         const auto& st = dec.status();
+        if (scopePath)
+        {
+            // Same as the plugin's processBlock: normalised with the level after the block.
+            constexpr float kEdge = 1.4f;
+            const float refLin = std::pow (10.f, st.refDb / 20.f);
+            const float norm = refLin > 1e-6f ? 1.f / refLin : 1.f;
+            for (int k = 0; k < n; ++k)
+            {
+                if (++scopeDecim < 2) continue;
+                scopeDecim = 0;
+                const double tk = double (i + size_t (k)) / sr;
+                if (tk < scopeT0 || tk >= scopeT1) continue;
+                float x = L[i + size_t (k)] * norm, y = R[i + size_t (k)] * norm;
+                const float m = std::sqrt (x * x + y * y);
+                if (m > kEdge) { x *= kEdge / m; y *= kEdge / m; }
+                scopePts.push_back (int8_t (std::lround (std::clamp (x / kEdge, -1.f, 1.f) * 127.f)));
+                scopePts.push_back (int8_t (std::lround (std::clamp (y / kEdge, -1.f, 1.f) * 127.f)));
+            }
+            const double tEnd = double (i + size_t (n)) / sr;
+            while (nextStatus < scopeT1 && tEnd >= nextStatus)
+            {
+                if (nextStatus >= scopeT0)
+                {
+                    const auto sp = int16_t (std::lround (std::clamp (spd[size_t (n - 1)], -32.f, 32.f) * 1000.f));
+                    scopeStatus.push_back (uint8_t (uint16_t (sp) & 0xff));
+                    scopeStatus.push_back (uint8_t (uint16_t (sp) >> 8));
+                    scopeStatus.push_back (uint8_t ((st.signal ? 1 : 0) | (st.bitLock ? 2 : 0) | (st.anchored ? 4 : 0)));
+                    scopeStatus.push_back (0);
+                }
+                nextStatus += 0.01;
+            }
+        }
         if (st.signal)  sigSamples  += size_t (n);
         if (st.bitLock) lockSamples += size_t (n);
         const double t = double (i + size_t (n)) / sr;
@@ -181,6 +240,19 @@ int main (int argc, char** argv)
         }
     }
     if (out) std::fclose (out);
+
+    if (scopePath)
+    {
+        FILE* sf = std::fopen (scopePath, "wb");
+        if (! sf) { std::fprintf (stderr, "error: cannot write %s\n", scopePath); return 1; }
+        const uint32_t hdr[4] { uint32_t (std::lround (sr / 2.0)), uint32_t (scopePts.size() / 2),
+                                100u, uint32_t (scopeStatus.size() / 4) };
+        std::fwrite ("VTS1", 1, 4, sf);
+        std::fwrite (hdr, sizeof (uint32_t), 4, sf);
+        std::fwrite (scopePts.data(), 1, scopePts.size(), sf);
+        std::fwrite (scopeStatus.data(), 1, scopeStatus.size(), sf);
+        std::fclose (sf);
+    }
 
     const auto& st = dec.status();
     std::printf ("file            : %s (%.1f s @ %.0f Hz)\n", in, double (N) / sr, sr);
