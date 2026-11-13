@@ -82,5 +82,6 @@ JUCEなしで core/テストだけ: `-DVT_BUILD_PLUGIN=OFF`
 6. Max for Live 連携
 
 ## 方針メモ
-- xwax 等 GPL コードは使っていない（core はサードパーティコードなし）。ライセンス未決定。
+- xwax 等 GPL コードは使っていない（core はサードパーティコードなし）。
+- ライセンスは全体を AGPL-3.0-or-later（2026-11-13 決定、本文は `LICENSE.md`）。新しいソースファイルの先頭には `// SPDX-License-Identifier: AGPL-3.0-or-later` と `// Copyright (C) 2026 Shunichi Yamamoto` を付ける。JUCE は AGPLv3 の条件で使用。
 - PLUGIN_CODE `Vytr` / MANUFACTURER `Ymwk` は公開後に変えない（保存済みLiveセットの互換性）。

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Shunichi Yamamoto
+//
 // tc_analyze - run the timecode decoder over a WAV recording of a turntable.
 //
 //   tc_analyze input.wav [--side A|B] [--gate -36] [--csv trace.csv] [--block 128]

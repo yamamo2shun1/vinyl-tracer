@@ -123,6 +123,12 @@ cmake --build build --config Release
 - 長いファイルの読み込みを別スレッドにすること
 - 小さなMax for Liveデバイスとの連携（Liveのクリップの音源を扱う）
 
-## ライセンスについて
+## ライセンス
 
-`core/` はサードパーティのコードを含みません（xwax などのGPLコードは使っていません）。プラグインをビルドすると JUCE のライセンス（AGPLv3 または JUCE ライセンス）が適用されます。VST3 SDK は MIT ライセンスです。
+Vinyl Tracer は [GNU Affero General Public License v3.0](LICENSE.md)（またはそれ以降のバージョン、`AGPL-3.0-or-later`）で公開しています。`core/`・`plugin/`・`tests/`・`tools/` のすべてが対象です。
+
+- `core/` はサードパーティのコードを含みません（xwax などの GPL コードは使っていません）。
+- プラグインは [JUCE](https://juce.com/) を AGPLv3 の条件で使っています。
+- VST3 SDK（JUCE に同梱）は MIT ライセンスです。
+
+Serato、CV02 は各社の商標です。Vinyl Tracer はこれらの会社とは関係がなく、対応するタイムコード盤を示すためだけに名前を使っています。
