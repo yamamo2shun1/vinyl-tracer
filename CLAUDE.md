@@ -19,6 +19,7 @@ Ableton Live 等で使う VST3 / AU プラグイン。Serato CV02 / CV02.5 の�
 - `plugin/` JUCE層（`VinylTracerProcessor` / `VinylTracerEditor`）
 - `tests/` 合成タイムコード（カートリッジ速度比例＋逆回転で極性反転、RIAAデエンファシス、L/R不均衡、直交誤差、DC、ハム、ノイズ）による精度テスト
 - `tools/tc_analyze.cpp` 実機録音WAVを解析しCSV出力
+- `tools/macos_sign_notarize.sh` macOS のプラグインバンドルを Developer ID で署名・公証・staple
 
 ## 解析の設計判断（変更時は理由を踏まえること）
 - 位置 = 搬送波の位相（追従）＋ LFSR由来の絶対オフセット。速度の積算はしない → ドリフトしない。
@@ -59,6 +60,7 @@ Ableton Live 等で使う VST3 / AU プラグイン。Serato CV02 / CV02.5 の�
 - `plugin/` は **未コンパイル**（作成環境にJUCEが無かった）。最初のビルドでのAPI修正が想定される。
 - 実機Serato盤では未検証。特にAMビットがどちらのピークに載っているか、チャンネル割り当ては実録音で確認が必要（自動判定はある）。
 - 2026-11-12 追記：Windows / VS2022 でプラグインのビルド・Live 12 への読み込みを確認。バトルブレイクスのタイムコード面（CV02.5）は Side B の定義でロック（cfg 1 = R主・方向反転）。実録音（リポジトリ外の `wav/`）で `tc_analyze --window` を使い、停止区間の位置変動・反転時のステップを評価している（Issue #1）。
+- 2026-11-13 追記：macOS（Xcode 26.6、JUCE 9.0.5）で VST3 をビルド（arm64＋x86_64、macOS 11 以降、コード修正なし）。Developer ID（Yamamoto Works Ltd.、Team 52QVVBVD95、証明書の期限 2027-12-13）で署名・公証し、Live で動作を確認。AU は未ビルド。
 
 ## ビルドとテスト
 ```
@@ -71,10 +73,18 @@ build\Release\tc_analyze.exe rec.wav --side A --csv out.csv
 ```
 JUCEなしで core/テストだけ: `-DVT_BUILD_PLUGIN=OFF`
 
+macOS（Universal Binary）:
+```
+cmake -B build-mac -G Ninja -DCMAKE_BUILD_TYPE=Release "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+cmake --build build-mac --target VinylTracer_VST3      # AU は VinylTracer_AU
+tools/macos_sign_notarize.sh                            # 署名・公証・staple・検証（build-mac の VST3 と AU）
+```
+署名には有効な Developer ID Application 証明書（秘密鍵つき）がキーチェーンに必要。作成は Account Holder の Apple ID でしかできない（Admin では不可）。公証の資格情報は初回だけ `xcrun notarytool store-credentials vinyl-tracer --apple-id <Apple ID> --team-id 52QVVBVD95` で登録する（App 用パスワード）。
+
 解析ロジックを変えたら必ず `vt_test_decoder` を流し、変更前後の数値（p99 / max / drift / stuck / reanchor）を比較すること。
 
 ## 次の作業候補
-1. プラグインのビルドを通す（Windows / VS2022、次に macOS）
+1. macOS の AU をビルドし Live / Logic で確認、macOS 版の配布用 ZIP と INSTALL.md の macOS 節
 2. Ableton Live で動作確認（入力モニター In、バッファ 64–128）
 3. JUMBLEQ経由で実機タイムコードを録音（通常再生 / 低速 / スクラッチ / 針の載せ替え）→ `tc_analyze` で検証・調整
 4. 長いサンプル読み込みのバックグラウンド化、高速時の音質
