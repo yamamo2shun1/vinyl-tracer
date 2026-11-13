@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Shunichi Yamamoto
+//
 // test_player.cpp - end-to-end check: synthetic timecode -> decoder -> player.
 // Compares the audio rendered from decoded positions with the audio rendered
 // from the true record positions (same player), and measures CPU time.

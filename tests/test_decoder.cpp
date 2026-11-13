@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Shunichi Yamamoto
+//
 // test_decoder.cpp - accuracy tests for TimecodeDecoder on synthetic timecode.
 //
 // Each scenario generates a known record motion, renders it through the
