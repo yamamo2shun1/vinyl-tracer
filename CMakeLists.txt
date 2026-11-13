@@ -5,6 +5,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# Link the MSVC runtime statically, so the plug-in loads on machines without
+# the Visual C++ Redistributable (VCRUNTIME140.dll / MSVCP140.dll).
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 option(VT_BUILD_PLUGIN "Build the JUCE plug-in (needs JUCE)" ON)
 option(VT_BUILD_TESTS  "Build the decoder tests and tools"    ON)
 
