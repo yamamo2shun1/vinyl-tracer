@@ -335,7 +335,7 @@ void VinylTracerProcessor::setStateInformation (const void* data, int sizeInByte
 
     cueCycles.store (double (state.getProperty ("cueCycles", 0.0)));
     cueValid.store (bool (state.getProperty ("cueValid", false)));
-    setWaveViewSeconds (int (state.getProperty ("waveViewSeconds", 4)));
+    setWaveViewSeconds (int (state.getProperty ("waveViewSeconds", 2)));
     const int cfg = int (state.getProperty ("config", -1));
     savedConfig.store (cfg);
     if (cfg >= 0)

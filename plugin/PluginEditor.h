@@ -20,8 +20,8 @@ private:
 };
 
 // Scrolling waveform (a few seconds around the playhead, which stays in the
-// centre) above an overview of the whole sample, coloured in steps by the
-// amplitude.
+// centre) above an overview of the whole sample, coloured by the brightness
+// of the sound (red = low, violet = high).
 class WaveView : public juce::Component
 {
 public:
@@ -46,17 +46,27 @@ private:
 
     // min / max over both channels per kBinFrames frames of the sample
     static constexpr int kBinFrames = 64;
-    std::vector<float> mins, maxs, meanSq;              // per bin
+    std::vector<float> mins, maxs, meanSq, diffSq;      // per bin (diffSq: mean squared first difference)
     std::vector<float> ovMins, ovMaxs, ovRms;           // overview: one entry per pixel column (rebuilt on resize)
+    std::vector<juce::Colour> ovCol;
+    juce::Image scrollImg, ovImg;                       // waveform columns, redrawn every paint
     float ovRmsMax = 1.f;
     double binSeconds = 0.0;
+    double sampleRate = 48000.0;
     float  peak = 1.f;
     double duration = 0.0;
     double playhead = 0.0;
     bool   loop = false;
-    double viewSeconds = 4.0;
+    double viewSeconds = 2.0;
     std::array<double, VinylTracerProcessor::kNumCues> cues {};
     juce::String name;
+};
+
+// Colours for the standard widgets: black base, yellow accent.
+class VtLookAndFeel : public juce::LookAndFeel_V4
+{
+public:
+    VtLookAndFeel();
 };
 
 class VinylTracerEditor : public juce::AudioProcessorEditor,
@@ -82,12 +92,14 @@ private:
     static void fillChoices (juce::ComboBox& box, juce::RangedAudioParameter* param);
 
     VinylTracerProcessor& proc;
+    VtLookAndFeel lnf; // declared before the widgets so it outlives them
 
     juce::TextButton loadButton { "Load Sample..." };
     std::array<juce::TextButton, VinylTracerProcessor::kNumCues> cueButtons;
+    juce::Label      cueLabel;
     std::array<double, VinylTracerProcessor::kNumCues> shownCues {};
     juce::TooltipWindow tooltips { this };
-    juce::Label      sampleLabel, statusLabel, levelLabel;
+    juce::Label      statusLabel, levelLabel;
 
     juce::ComboBox   timecodeBox, modeBox, rpmBox;
     juce::Label      timecodeLabel, modeLabel, rpmLabel, thresholdLabel, gainLabel;
