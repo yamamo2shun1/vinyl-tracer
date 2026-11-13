@@ -1,4 +1,4 @@
-# Vinyl Tracer (v0.3.0 試作)
+# Vinyl Tracer (v0.4.0 試作)
 
 Ableton Live などのDAWで、Serato CV02 / CV02.5 のタイムコードレコードを使い、プラグインに読み込んだサンプルをスクラッチ再生する VST3 / AU プラグインです。
 

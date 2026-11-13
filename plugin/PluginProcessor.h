@@ -51,7 +51,7 @@ public:
     std::shared_ptr<const vt::SampleData> getSampleForUI() const { return currentSample; }
 
     // Cue points: positions in the sample (seconds), NaN when empty.
-    static constexpr int kNumCues = 4;
+    static constexpr int kNumCues = 6;
     void   storeCue (int index) noexcept;           // the current playback position
     void   recallCue (int index) noexcept;          // play from the cue (done on the audio thread)
     void   clearCue (int index) noexcept;
@@ -103,7 +103,7 @@ private:
     std::atomic<bool>   cueValid { false };
     std::array<std::atomic<double>, kNumCues> cuePoints;  // sample seconds, NaN = empty
     std::atomic<double> jumpRequest { std::nan ("") };   // sample seconds to jump to, NaN = none
-    std::atomic<int>    waveViewSeconds { 4 };
+    std::atomic<int>    waveViewSeconds { 2 };
     std::atomic<int>    savedConfig { -1 };
     static constexpr float kNoNominal = -100.f;          // "no stored level"
     std::atomic<float>  savedNominalDb { kNoNominal };   // measured timecode level (dBFS)
