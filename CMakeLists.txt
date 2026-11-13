@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(VinylTracer VERSION 0.4.2 LANGUAGES C CXX)
+project(VinylTracer VERSION 0.5.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -76,10 +76,13 @@ if(VT_BUILD_PLUGIN)
         plugin/PluginProcessor.cpp
         plugin/PluginEditor.cpp)
 
-    # Images built into the plugin (namespace VinylTracerData, header BinaryData.h)
+    # Images and fonts built into the plugin (namespace VinylTracerData, header BinaryData.h)
     juce_add_binary_data(VinylTracerData
         NAMESPACE VinylTracerData
-        SOURCES   logo/vinyl-tracer-mark-dark.svg)
+        SOURCES   logo/vinyl-tracer-mark-dark.svg
+                  fonts/SpaceGrotesk-SemiBold.ttf
+                  fonts/JetBrainsMono-Regular.ttf
+                  fonts/JetBrainsMono-Bold.ttf)
 
     target_compile_definitions(VinylTracer PUBLIC
         JUCE_WEB_BROWSER=0
