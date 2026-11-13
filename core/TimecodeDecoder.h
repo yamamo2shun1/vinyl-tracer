@@ -36,6 +36,7 @@ struct DecoderStatus
     double speed       = 0.0;   // 1.0 = nominal speed
     float  levelDb     = -120.f;// input peak level (dBFS)
     float  refDb       = -120.f;// tracked nominal carrier level (dBFS)
+    float  gateDb      = -120.f;// level that opens the gate (dBFS, same scale as refDb)
     bool   refLearned  = false; // refDb was measured (or restored), not the default
     int    config      = -1;    // detected channel/polarity/direction config
     int    reanchors   = 0;     // number of absolute jumps (needle drops / slips)

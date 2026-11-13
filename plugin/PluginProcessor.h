@@ -75,10 +75,13 @@ public:
     {
         bool   signal = false, bitLock = false, anchored = false, cueValid = false;
         double speed = 0.0, recordSeconds = 0.0, sampleSeconds = 0.0;
-        float  levelDb = -120.f, refDb = -120.f;
+        float  levelDb = -120.f, refDb = -120.f, gateDb = -120.f;
         int    config = -1, reanchors = 0;
     };
     Status getStatus() const noexcept;
+
+    // Largest |sample| of the input channel (0 = L, 1 = R) since the last call.
+    float takeInputPeak (int ch) noexcept { return inPeak[size_t (ch & 1)].exchange (0.f); }
 
     // Lissajous points (x, y interleaved), normalised to the nominal level.
     int readScope (float* xy, int maxPoints) noexcept;
@@ -124,7 +127,8 @@ private:
     // Status published by the audio thread
     std::atomic<bool>   stSignal { false }, stBitLock { false }, stAnchored { false };
     std::atomic<double> stSpeed { 0.0 }, stRecord { 0.0 }, stSample { 0.0 };
-    std::atomic<float>  stLevel { -120.f }, stRef { -120.f };
+    std::atomic<float>  stLevel { -120.f }, stRef { -120.f }, stGate { -120.f };
+    std::array<std::atomic<float>, 2> inPeak {};       // input peaks for the level meter
     std::atomic<int>    stConfig { -1 }, stReanchors { 0 };
 
     // Scope FIFO (single producer: audio thread, single consumer: editor)

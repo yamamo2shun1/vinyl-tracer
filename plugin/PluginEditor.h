@@ -22,6 +22,23 @@ private:
     int writePos = 0;
 };
 
+// Input level meter: L and R peak bars (-60..0 dBFS) with a peak hold, a clip
+// lamp on top, and lines for the learned nominal level (accent) and the level
+// that opens the gate (dim). The decoder's levels are the magnitude of the L/R
+// pair, which on a clean carrier equals each channel's peak.
+class LevelMeter : public juce::Component
+{
+public:
+    // peaks: linear |sample| since the last update; called at the timer rate
+    void update (float peakL, float peakR, float nominalDb, float gateDb, double dtSeconds);
+    void paint (juce::Graphics&) override;
+
+private:
+    std::array<float, 2> levelDb { -120.f, -120.f }, holdDb { -120.f, -120.f };
+    std::array<double, 2> holdAge { 0.0, 0.0 }, clipAge { 1e9, 1e9 };
+    float nominal = -120.f, gate = -120.f;
+};
+
 // Scrolling waveform (a few seconds around the playhead, which stays in the
 // centre) above an overview of the whole sample, coloured by the brightness
 // of the sound (red = low, violet = high).
@@ -119,8 +136,9 @@ private:
     std::unique_ptr<SliderAttachment> thresholdAtt, gainAtt;
     std::unique_ptr<ButtonAttachment> thruAtt, loopAtt;
 
-    ScopeView scope;
-    WaveView  wave;
+    ScopeView  scope;
+    LevelMeter meter;
+    WaveView   wave;
     std::unique_ptr<juce::FileChooser> chooser;
     const vt::SampleData* shownSample = nullptr;
     std::vector<float> scopeBuf = std::vector<float> (4096 * 2);

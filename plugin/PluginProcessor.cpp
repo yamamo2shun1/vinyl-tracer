@@ -123,6 +123,14 @@ void VinylTracerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     const float* inL = buffer.getReadPointer (0);
     const float* inR = buffer.getReadPointer (1);
 
+    // input peaks for the level meter (before the output overwrites the input)
+    {
+        const float pl = buffer.getMagnitude (0, 0, numSamples);
+        const float pr = buffer.getMagnitude (1, 0, numSamples);
+        if (pl > inPeak[0].load (std::memory_order_relaxed)) inPeak[0].store (pl, std::memory_order_relaxed);
+        if (pr > inPeak[1].load (std::memory_order_relaxed)) inPeak[1].store (pr, std::memory_order_relaxed);
+    }
+
     const int chunkMax = int (vinyl.size());
     for (int offset = 0; offset < numSamples; offset += chunkMax)
     {
@@ -198,6 +206,7 @@ void VinylTracerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     stSample.store (player.lastSourceSeconds());
     stLevel.store (st.levelDb);
     stRef.store (st.refDb);
+    stGate.store (st.gateDb);
     stConfig.store (st.config);
     stReanchors.store (st.reanchors);
     if (st.config >= 0) savedConfig.store (st.config);
@@ -217,6 +226,7 @@ VinylTracerProcessor::Status VinylTracerProcessor::getStatus() const noexcept
     s.sampleSeconds = stSample.load();
     s.levelDb       = stLevel.load();
     s.refDb         = stRef.load();
+    s.gateDb        = stGate.load();
     s.config        = stConfig.load();
     s.reanchors     = stReanchors.load();
     return s;
