@@ -99,11 +99,17 @@ private:
     double spanSeconds = 2.0;
 };
 
-// Colours for the standard widgets: black base, yellow accent.
+// Colours for the standard widgets (black base, yellow accent) and the
+// embedded default font (JetBrains Mono Regular / Bold, also used for the
+// monospaced text).
 class VtLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
     VtLookAndFeel();
+    juce::Typeface::Ptr getTypefaceForFont (const juce::Font&) override;
+
+private:
+    juce::Typeface::Ptr regular, bold;
 };
 
 class VinylTracerEditor : public juce::AudioProcessorEditor,
@@ -129,8 +135,13 @@ private:
     static void fillChoices (juce::ComboBox& box, juce::RangedAudioParameter* param);
 
     VinylTracerProcessor& proc;
-    VtLookAndFeel lnf; // declared before the widgets so it outlives them
+    // Shared by all open editors (it is also the default look-and-feel while
+    // one is open, see the constructor); declared before the widgets so it
+    // outlives them.
+    juce::SharedResourcePointer<VtLookAndFeel> lnf;
+    static inline int openEditors = 0; // message thread only
     std::unique_ptr<juce::Drawable> logo; // SVG, top right above the version (from logo/ via BinaryData)
+    juce::Typeface::Ptr nameTypeface;     // Space Grotesk SemiBold (fonts/, OFL) for the plugin name
 
     juce::TextButton loadButton { "Load Sample..." };
     juce::ToggleButton diagButton { "Diagnostics" };

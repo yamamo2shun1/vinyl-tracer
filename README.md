@@ -1,4 +1,4 @@
-# Vinyl Tracer (v0.4.2)
+# Vinyl Tracer (v0.5.0)
 
 Ableton Live などのDAWで、Serato CV02 / CV02.5 のタイムコードレコードを使い、プラグインに読み込んだサンプルをスクラッチ再生する VST3 / AU プラグインです。
 
@@ -130,5 +130,8 @@ Vinyl Tracer は [GNU Affero General Public License v3.0](LICENSE.md)（また�
 - `core/` はサードパーティのコードを含みません（xwax などの GPL コードは使っていません）。
 - プラグインは [JUCE](https://juce.com/) を AGPLv3 の条件で使っています。
 - VST3 SDK（JUCE に同梱）は MIT ライセンスです。
+- プラグインに埋め込んでいるフォント（`fonts/`）は、どちらも SIL Open Font License 1.1 です。
+  - [Space Grotesk](https://github.com/floriankarsten/space-grotesk)（プラグイン名）：[fonts/OFL-SpaceGrotesk.txt](fonts/OFL-SpaceGrotesk.txt)
+  - [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono)（そのほかの文字）：[fonts/OFL-JetBrainsMono.txt](fonts/OFL-JetBrainsMono.txt)
 
 Serato、CV02 は各社の商標です。Vinyl Tracer はこれらの会社とは関係がなく、対応するタイムコード盤を示すためだけに名前を使っています。

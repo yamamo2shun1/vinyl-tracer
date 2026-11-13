@@ -750,15 +750,25 @@ void DiagView::paint (juce::Graphics& g)
 VinylTracerEditor::VinylTracerEditor (VinylTracerProcessor& p)
     : AudioProcessorEditor (&p), proc (p)
 {
-    setLookAndFeel (&lnf);
-    logo = juce::Drawable::createFromImageData (VinylTracerData::vinyltracermarkdark_svg,
+    setLookAndFeel (&lnf.get());
+    // JUCE resolves the default font through the *default* look-and-feel, so
+    // ours (with JetBrains Mono as the default face) becomes the default while
+    // any editor is open. The typeface cache may hold a face resolved before.
+    if (openEditors++ == 0)
+    {
+        juce::LookAndFeel::setDefaultLookAndFeel (&lnf.get());
+        juce::Typeface::clearTypefaceCache();
+    }
+    logo =juce::Drawable::createFromImageData (VinylTracerData::vinyltracermarkdark_svg,
                                                 size_t (VinylTracerData::vinyltracermarkdark_svgSize));
+    nameTypeface = juce::Typeface::createSystemTypefaceFor (VinylTracerData::SpaceGroteskSemiBold_ttf,
+                                                            size_t (VinylTracerData::SpaceGroteskSemiBold_ttfSize));
     auto& vts = proc.apvts;
 
     auto setupLabel = [this] (juce::Label& l, const juce::String& text)
     {
         l.setText (text, juce::dontSendNotification);
-        l.setColour (juce::Label::textColourId, kDim);
+        l.setColour (juce::Label::textColourId, kText);
         l.setFont (juce::Font (juce::FontOptions (12.f)));
         addAndMakeVisible (l);
     };
@@ -859,12 +869,36 @@ VinylTracerEditor::~VinylTracerEditor()
 {
     stopTimer();
     setLookAndFeel (nullptr);
+    if (--openEditors == 0)
+    {
+        juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
+        juce::Typeface::clearTypefaceCache();
+    }
 }
 
 //==============================================================================
+juce::Typeface::Ptr VtLookAndFeel::getTypefaceForFont (const juce::Font& font)
+{
+    const auto name = font.getTypefaceName();
+    if (name == juce::Font::getDefaultSansSerifFontName() || name == juce::Font::getDefaultMonospacedFontName())
+        if (auto& t = font.isBold() ? bold : regular; t != nullptr)
+            return t;
+
+    return juce::LookAndFeel_V4::getTypefaceForFont (font);
+}
+
 VtLookAndFeel::VtLookAndFeel()
     : juce::LookAndFeel_V4 ({ kBg, kRaised, kPanel, kOutline, kText, kAccent, kBg, kAccent, kText })
 {
+    // Text that would use the system sans-serif (Verdana on Windows) or
+    // monospaced font (Consolas) uses the embedded JetBrains Mono instead, the
+    // same on every system (see getTypefaceForFont).
+    regular = juce::Typeface::createSystemTypefaceFor (VinylTracerData::JetBrainsMonoRegular_ttf,
+                                                       size_t (VinylTracerData::JetBrainsMonoRegular_ttfSize));
+    bold    = juce::Typeface::createSystemTypefaceFor (VinylTracerData::JetBrainsMonoBold_ttf,
+                                                       size_t (VinylTracerData::JetBrainsMonoBold_ttfSize));
+    setDefaultSansSerifTypeface (regular);
+
     setColour (juce::ResizableWindow::backgroundColourId, kBg);
 
     setColour (juce::TextButton::buttonColourId,   kRaised);
@@ -910,18 +944,25 @@ void VinylTracerEditor::fillChoices (juce::ComboBox& box, juce::RangedAudioParam
 void VinylTracerEditor::paint (juce::Graphics& g)
 {
     g.fillAll (kBg);
-    // Logo at the top right with the version right-aligned below it, beside
-    // the Load Sample button.
+    // Logo at the top right with the version right-aligned below it, and the
+    // plugin name (Space Grotesk SemiBold) to the left of the logo.
     // The logo is a vector (SVG): change logoH to resize it, it stays sharp.
     const float right = float (getWidth() - 14);
-    constexpr float logoH = 36.f, logoTop = 6.f;
+    constexpr float logoH = 36.f, logoTop = 6.f, nameH = 23.f, nameGap = 8.f;
+    float logoLeft = right;
     if (logo != nullptr)
     {
         const auto bounds = logo->getDrawableBounds();
         const float logoW = bounds.getHeight() > 0.f ? logoH * bounds.getWidth() / bounds.getHeight() : logoH;
-        logo->drawWithin (g, juce::Rectangle<float> (right - logoW, logoTop, logoW, logoH),
+        logoLeft = right - logoW;
+        logo->drawWithin (g, juce::Rectangle<float> (logoLeft, logoTop, logoW, logoH),
                           juce::RectanglePlacement::centred, 1.f);
     }
+    g.setColour (kText);
+    g.setFont (nameTypeface != nullptr ? juce::Font (juce::FontOptions (nameTypeface).withHeight (nameH))
+                                       : juce::Font (juce::FontOptions (nameH, juce::Font::bold)));
+    g.drawText ("Vinyl Tracer", juce::Rectangle<float> (logoLeft - nameGap - 300.f, logoTop, 300.f, logoH),
+                juce::Justification::centredRight);
     g.setColour (kDim);
     g.setFont (juce::Font (juce::FontOptions (11.f)));
     // Version from CMake (project VERSION), so a replaced build is recognisable.
