@@ -587,6 +587,165 @@ void WaveView::paintOverview (juce::Graphics& g, juce::Rectangle<float> area)
 }
 
 //==============================================================================
+namespace
+{
+constexpr int   kEditorW     = 780;
+constexpr int   kEditorH     = 434;  // without the diagnostics strip
+constexpr int   kDiagH       = 156;  // diagnostics strip (+ 6 px gap)
+constexpr float kDiagGutter  = 112.f; // lane names and values at the left, then the guide labels
+// speed lane: compressed scale, +-4x at the edges, 0.05x still visible
+constexpr float kSpeedKnee   = 0.05f, kSpeedEdge = 4.f;
+// lock error lane: log scale
+constexpr float kErrLow      = 0.002f, kErrHigh = 0.2f;
+// centre offset lane: linear
+constexpr float kOffsetHigh  = 1.5f;
+} // namespace
+
+void DiagView::push (const VinylTracerProcessor::DiagFrame* frames, int n)
+{
+    for (int i = 0; i < n; ++i)
+        hist[size_t (total++ % capacity)] = frames[i];
+}
+
+void DiagView::paint (juce::Graphics& g)
+{
+    auto r = getLocalBounds().toFloat();
+    g.setColour (kPanel);
+    g.fillRoundedRectangle (r, 6.f);
+
+    auto inner = r.reduced (6.f, 4.f);
+    const float laneGap = 4.f;
+    const float laneH = (inner.getHeight() - 2.f * laneGap) / 3.f;
+    juce::Rectangle<float> lanes[3];
+    for (int k = 0; k < 3; ++k)
+    {
+        lanes[k] = inner.removeFromTop (laneH);
+        inner.removeFromTop (laneGap);
+    }
+    auto plot = [&] (int k) { return lanes[k].withTrimmedLeft (kDiagGutter); };
+
+    const int cols = juce::jmax (1, int (plot (0).getWidth()));
+    const double fpp = spanSeconds * 1000.0 / double (cols); // frames per pixel column
+    const int64_t oldest = juce::jmax<int64_t> (0, total - capacity);
+
+    // y of a value in each lane (0..1 from the bottom, speed -1..1 about the middle)
+    auto speedPos = [] (float v)
+    {
+        const float a = std::log1p (std::abs (v) / kSpeedKnee) / std::log1p (kSpeedEdge / kSpeedKnee);
+        return juce::jlimit (-1.f, 1.f, v < 0.f ? -a : a);
+    };
+    auto errPos = [] (float e)
+    {
+        return juce::jlimit (0.f, 1.f, std::log (juce::jmax (e, 1e-6f) / kErrLow) / std::log (kErrHigh / kErrLow));
+    };
+    auto offPos = [] (float o) { return juce::jlimit (0.f, 1.f, o / kOffsetHigh); };
+    auto levelColour = [] (float x, float ok, float warn) { return x < ok ? kMeterOk : x < warn ? kAccent : kWarn; };
+
+    // guide lines with labels (in the gutter)
+    g.setFont (juce::Font (juce::FontOptions (10.f)));
+    auto guide = [&] (int k, float y, const juce::String& label)
+    {
+        const auto p = plot (k);
+        g.setColour (kOutline);
+        g.fillRect (p.getX(), y - 0.5f, p.getWidth(), 1.f);
+        g.setColour (kDim);
+        g.drawText (label, juce::Rectangle<float> (p.getX() - 34.f, y - 6.f, 30.f, 12.f), juce::Justification::centredRight);
+    };
+    {
+        const auto p = plot (0);
+        const float mid = p.getCentreY(), h = p.getHeight() * 0.5f;
+        guide (0, mid - speedPos (1.f) * h, "+1x");
+        guide (0, mid, "0");
+        guide (0, mid - speedPos (-1.f) * h, "-1x");
+    }
+    {
+        const auto p = plot (1);
+        guide (1, p.getBottom() - errPos (0.02f) * p.getHeight(), "0.02");
+        guide (1, p.getBottom() - errPos (0.05f) * p.getHeight(), "0.05");
+    }
+    {
+        const auto p = plot (2);
+        guide (2, p.getBottom() - offPos (1.f) * p.getHeight(), "1.0");
+        guide (2, p.getBottom() - offPos (0.5f) * p.getHeight(), "0.5");
+    }
+
+    // columns, newest at the right
+    for (int c = 0; c < cols; ++c)
+    {
+        const double f1 = double (total) - double (cols - 1 - c) * fpp;
+        int64_t i0 = int64_t (std::floor (f1 - fpp)), i1 = int64_t (std::floor (f1));
+        if (i1 <= i0) i1 = i0 + 1;
+        i0 = juce::jmax (i0, oldest);
+        if (i1 <= i0 || i1 > total) continue;
+
+        float vMin = 1e9f, vMax = -1e9f, err = 0.f, off = 0.f, open = 0.f;
+        for (int64_t i = i0; i < i1; ++i)
+        {
+            const auto& f = hist[size_t (i % capacity)];
+            vMin = juce::jmin (vMin, f.vMin);
+            vMax = juce::jmax (vMax, f.vMax);
+            err  = juce::jmax (err, f.lockErr);
+            off  = juce::jmax (off, f.offset);
+            open += f.open;
+        }
+        open /= float (i1 - i0);
+
+        const float x = plot (0).getX() + float (c);
+        if (open < 0.5f)
+        {
+            // no carrier (gate closed): a faint band across the lanes
+            g.setColour (kOutline.withAlpha (0.35f));
+            for (int k = 0; k < 3; ++k)
+                g.fillRect (x, plot (k).getY(), 1.f, plot (k).getHeight());
+            continue;
+        }
+        {   // speed range in this column (thick when it jitters)
+            const auto p = plot (0);
+            const float mid = p.getCentreY(), h = p.getHeight() * 0.5f;
+            const float y0 = mid - speedPos (vMax) * h, y1 = mid - speedPos (vMin) * h;
+            g.setColour (kText.withAlpha (0.85f));
+            g.fillRect (x, y0, 1.f, juce::jmax (1.f, y1 - y0));
+        }
+        {
+            const auto p = plot (1);
+            const float y = p.getBottom() - errPos (err) * p.getHeight();
+            // clean playback stays below ~0.02; from 0.05 the player turns the level down
+            g.setColour (levelColour (err, 0.02f, 0.05f));
+            g.fillRect (x, y, 1.f, juce::jmax (1.f, p.getBottom() - y));
+        }
+        {
+            const auto p = plot (2);
+            const float y = p.getBottom() - offPos (off) * p.getHeight();
+            // Below ~0.3x the carrier itself gets through the centre's low-pass,
+            // so the offset does not mean a shaken stylus there: drawn grey.
+            const bool slow = juce::jmax (std::abs (vMin), std::abs (vMax)) < 0.3f;
+            g.setColour (slow ? kOutline.brighter (0.3f) : levelColour (off, 0.3f, 0.7f));
+            g.fillRect (x, y, 1.f, juce::jmax (1.f, p.getBottom() - y));
+        }
+    }
+
+    // lane names and the latest values
+    const auto* last = total > 0 ? &hist[size_t ((total - 1) % capacity)] : nullptr;
+    const bool on = last != nullptr && last->open >= 0.5f;
+    const juce::String values[3] {
+        on ? juce::String (0.5f * (last->vMin + last->vMax), 2) + "x" : juce::String ("--"),
+        on ? juce::String (last->lockErr, 3) : juce::String ("--"),
+        on ? juce::String (last->offset, 2) : juce::String ("--")
+    };
+    const char* names[3] { "speed", "lock error", "centre offset" };
+    for (int k = 0; k < 3; ++k)
+    {
+        auto gtr = lanes[k].withWidth (kDiagGutter - 38.f);
+        g.setColour (kText);
+        g.setFont (juce::Font (juce::FontOptions (11.f)));
+        g.drawText (names[k], gtr.removeFromTop (14.f), juce::Justification::topLeft);
+        g.setColour (kAccent);
+        g.setFont (juce::Font (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(), 11.f, juce::Font::plain)));
+        g.drawText (values[k], gtr.removeFromTop (14.f), juce::Justification::topLeft);
+    }
+}
+
+//==============================================================================
 VinylTracerEditor::VinylTracerEditor (VinylTracerProcessor& p)
     : AudioProcessorEditor (&p), proc (p)
 {
@@ -603,6 +762,18 @@ VinylTracerEditor::VinylTracerEditor (VinylTracerProcessor& p)
 
     addAndMakeVisible (loadButton);
     loadButton.onClick = [this] { openChooser(); };
+
+    diagButton.setToggleState (proc.getShowDiagnostics(), juce::dontSendNotification);
+    diagButton.setTooltip ("Show the last seconds of the decoded speed, the tracker's lock error\n"
+                           "(clean carrier ~0.005; above 0.05 the level is turned down) and the\n"
+                           "centre offset of the L/R path (1.0 = the path passes the origin)");
+    diagButton.onClick = [this]
+    {
+        proc.setShowDiagnostics (diagButton.getToggleState());
+        updateDiagnosticsVisibility();
+    };
+    addAndMakeVisible (diagButton);
+    addChildComponent (diag);
 #if JUCE_MAC
     const juce::String storeKey = "Cmd", deleteKey = "Option";
 #else
@@ -675,7 +846,9 @@ VinylTracerEditor::VinylTracerEditor (VinylTracerProcessor& p)
     addAndMakeVisible (meter);
     addAndMakeVisible (wave);
 
-    setSize (780, 434);
+    // drop diagnostics collected while the editor was closed
+    while (proc.readDiagnostics (diagBuf.data(), int (diagBuf.size())) > 0) {}
+    updateDiagnosticsVisibility(); // sets the size
     startTimerHz (kTimerHz); // smooth scrolling of the waveform
 }
 
@@ -753,6 +926,8 @@ void VinylTracerEditor::resized()
 
     auto top = r.removeFromTop (28);
     loadButton.setBounds (top.removeFromLeft (130));
+    top.removeFromLeft (12);
+    diagButton.setBounds (top.removeFromLeft (120));
 
     r.removeFromTop (10);
     auto row = r.removeFromTop (44);
@@ -798,22 +973,26 @@ void VinylTracerEditor::resized()
 
     r.removeFromTop (10);
     auto bottom = r;
-    // the L / R scope ends level with the waveform, the level and status text below both
-    const int viewH = bottom.getHeight() - 48 - 6;
-    auto left = bottom.removeFromLeft (220);
-    {
-        auto views = left.removeFromTop (viewH);
-        meter.setBounds (views.removeFromLeft (14)); // input level, left of the L / R scope
-        views.removeFromLeft (6);
-        scope.setBounds (views);
-    }
-    left.removeFromTop (6);
-    levelLabel.setBounds (left.removeFromTop (40));
-
-    bottom.removeFromLeft (12);
-    statusLabel.setBounds (bottom.removeFromBottom (48));
+    // the level and status text at the bottom, the diagnostics strip (when
+    // shown) above them across the full width, the L / R scope level with the
+    // waveform above that
+    auto texts = bottom.removeFromBottom (48);
     bottom.removeFromBottom (6);
+    if (diag.isVisible())
+    {
+        diag.setBounds (bottom.removeFromBottom (kDiagH));
+        bottom.removeFromBottom (6);
+    }
+    auto left = bottom.removeFromLeft (220);
+    meter.setBounds (left.removeFromLeft (14)); // input level, left of the L / R scope
+    left.removeFromLeft (6);
+    scope.setBounds (left);
+    bottom.removeFromLeft (12);
     wave.setBounds (bottom);
+
+    levelLabel.setBounds (texts.removeFromLeft (220).removeFromTop (40));
+    texts.removeFromLeft (12);
+    statusLabel.setBounds (texts);
 }
 
 void VinylTracerEditor::timerCallback()
@@ -851,6 +1030,18 @@ void VinylTracerEditor::timerCallback()
     }
     wave.setPlayhead (st.sampleSeconds);
 
+    // diagnostics (always drained; drawn when shown)
+    if (proc.getShowDiagnostics() != diag.isVisible())
+        updateDiagnosticsVisibility(); // changed by a restored state
+    for (int k; (k = proc.readDiagnostics (diagBuf.data(), int (diagBuf.size()))) > 0;)
+        if (diag.isVisible())
+            diag.push (diagBuf.data(), k);
+    if (diag.isVisible())
+    {
+        diag.setSpanSeconds (double (proc.getWaveViewSeconds()));
+        diag.repaint();
+    }
+
     auto flag = [] (bool b, const char* on, const char* off) { return juce::String (b ? on : off); };
     juce::String line1 = flag (st.signal, "SIGNAL ok ", "SIGNAL -- ")
                        + "| " + flag (st.bitLock, "CODE ok ", "CODE -- ")
@@ -865,6 +1056,16 @@ void VinylTracerEditor::timerCallback()
     levelLabel.setText ("input " + juce::String (st.levelDb, 1) + " dBFS\nnominal " + juce::String (st.refDb, 1)
                             + " dBFS  cfg " + juce::String (st.config),
                         juce::dontSendNotification);
+}
+
+void VinylTracerEditor::updateDiagnosticsVisibility()
+{
+    const bool on = proc.getShowDiagnostics();
+    diagButton.setToggleState (on, juce::dontSendNotification);
+    diag.setVisible (on);
+    // the strip adds to the window's height, the other views keep their size
+    setSize (kEditorW, kEditorH + (on ? kDiagH + 6 : 0));
+    resized(); // also when the size did not change
 }
 
 void VinylTracerEditor::cueClicked (int index)

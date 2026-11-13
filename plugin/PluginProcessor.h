@@ -86,6 +86,15 @@ public:
     // Lissajous points (x, y interleaved), normalised to the nominal level.
     int readScope (float* xy, int maxPoints) noexcept;
 
+    // Diagnostics, one frame per millisecond: decoded speed range, the phase
+    // loop's mean |residual| and the L/R path's centre offset (largest in the
+    // frame), and the share of the frame with the gate open.
+    struct DiagFrame { float vMin = 0.f, vMax = 0.f, lockErr = 0.f, offset = 0.f, open = 0.f; };
+    int  readDiagnostics (DiagFrame* out, int maxFrames) noexcept;
+    // Whether the editor shows the diagnostics strip (stored with the state).
+    bool getShowDiagnostics() const noexcept { return showDiagnostics.load(); }
+    void setShowDiagnostics (bool b) noexcept { showDiagnostics.store (b); }
+
     juce::AudioProcessorValueTreeState apvts;
 
 private:
@@ -99,7 +108,7 @@ private:
     vt::ScratchPlayer   player;
 
     std::vector<double> posAbs, posRel, vinyl;
-    std::vector<float>  quality;
+    std::vector<float>  quality, speedBuf, lockErrBuf, offsetBuf;
     int    currentTimecode = -1;
     int    lastMode = -1;
     double relBase = 0.0;
@@ -136,6 +145,14 @@ private:
     juce::AbstractFifo scopeFifo { scopeSize };
     std::array<float, scopeSize * 2> scopeData {};
     int scopeDecim = 0;
+
+    // Diagnostics FIFO (audio thread -> editor), ~16 s of 1 ms frames
+    static constexpr int diagSize = 16384;
+    juce::AbstractFifo diagFifo { diagSize };
+    std::array<DiagFrame, diagSize> diagData {};
+    DiagFrame diagAcc;
+    int diagCount = 0, diagOpen = 0, diagFrameLen = 48;
+    std::atomic<bool> showDiagnostics { false };
 
     // Parameters
     std::atomic<float>* pTimecode = nullptr;

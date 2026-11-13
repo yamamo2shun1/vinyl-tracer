@@ -71,8 +71,14 @@ public:
     //  speed  : 1.0 = nominal
     //  quality: 1 = clean carrier, falling to 0 while the input is not one
     //           (stylus skating / skipping; the position follows noise there)
+    // Diagnostics (for display, not used for the position):
+    //  lockError   : mean |residual| of the phase loop (turns; clean ~0.005)
+    //  centreOffset: distance of the L/R path's centre (~30 Hz low-pass) from
+    //                the origin relative to its radius (1 = the path passes
+    //                through the origin); -1 while the gate is closed
     void process (const float* left, const float* right, int numSamples,
-                  double* posAbs, double* posRel, float* speed, float* quality = nullptr) noexcept;
+                  double* posAbs, double* posRel, float* speed, float* quality = nullptr,
+                  float* lockError = nullptr, float* centreOffset = nullptr) noexcept;
 
     const DecoderStatus& status() const noexcept { return status_; }
 
@@ -116,6 +122,7 @@ private:
 
     // Envelope of the calibrated magnitude (for bit amplitude normalisation)
     double env_ = 0.0, kEnv_ = 0.0;
+    double cenL_ = 0.0, cenR_ = 0.0, kCentre_ = 0.0; // centre of the L/R path (diagnostics)
 
     // Phase tracker (doubled angle, in turns)
     double X_ = 0.0, V_ = 0.0, A_ = 0.0;
