@@ -10,7 +10,7 @@ Ableton Live などのDAWで、Serato CV02 / CV02.5 のコントロール・ヴ�
 - **Windows**（10 / 11、64ビット）：VST3
 - **macOS**（11 以降、Apple シリコン / Intel）：VST3 / AU（署名・公証済みのインストーラ）
 
-配布版は [Releases](https://github.com/yamamo2shun1/vinyl-tracer/releases) からダウンロードできます。インストールの方法は [INSTALL.md](INSTALL.md) を見てください。
+配布版は [Releases](https://github.com/yamamo2shun1/vinyl-tracer/releases) からダウンロードできます。インストールの方法は [INSTALL_ja.md](INSTALL_ja.md) を見てください。
 
 DAWで曲を作りながら、「あ、このフレーズ、スクラッチしたらどうなるだろう？」という思いつきを、すぐに試したい、そんな思いで開発しました。
 

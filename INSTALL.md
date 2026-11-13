@@ -1,85 +1,87 @@
-# Vinyl Tracer のインストール
+# Installing Vinyl Tracer
 
-- [Windows（VST3）](#windows)
-- [macOS（VST3 / AU）](#macos)
+English | [日本語](INSTALL_ja.md)
 
-## 必要なもの
+- [Windows (VST3)](#windows)
+- [macOS (VST3 / AU)](#macos)
 
-- Windows 10 / 11（64ビット）、または macOS 11 以降（Apple シリコン / Intel）
-- VST3 または Audio Unit に対応した DAW（動作確認は Windows 11 ＋ Ableton Live 12、macOS 26 ＋ Ableton Live 12）
-- Serato CV02 / CV02.5 のコントロール・ヴァイナルと、ターンテーブル
-- ターンテーブルの信号をステレオでパソコンに入力できるオーディオインターフェイス
+## Requirements
+
+- Windows 10 / 11 (64-bit), or macOS 11 or later (Apple silicon / Intel)
+- A DAW that supports VST3 or Audio Units (tested on Windows 11 + Ableton Live 12 and macOS 26 + Ableton Live 12)
+- Serato CV02 / CV02.5 Control Vinyl and a turntable
+- An audio interface that can send the turntable signal to your computer in stereo
 
 ## Windows
 
-### インストール
+### Install
 
-1. ZIP を展開します。
-2. 中にある `Vinyl Tracer.vst3` フォルダを、**フォルダごと**次の場所へコピーします（管理者の許可を求められたら許可してください）。
+1. Extract the ZIP.
+2. Copy the `Vinyl Tracer.vst3` folder inside it, **as a whole folder**, to the following location (allow administrator access if asked):
 
    ```
    C:\Program Files\Common Files\VST3\
    ```
 
-3. DAW を起動し、プラグインを再スキャンします。
-   - Ableton Live：`Options` → `Settings`（Live 11 以前は `Preferences`）→ `Plug-Ins` で `Use VST3 Plug-In System Folders` をオンにし、`Rescan` を押します。
-4. プラグインの一覧に `Yamamoto Works` → `Vinyl Tracer` が出れば完了です。
+3. Start your DAW and rescan plug-ins.
+   - Ableton Live: open `Options` → `Settings` (`Preferences` in Live 11 and earlier) → `Plug-Ins`, turn on `Use VST3 Plug-In System Folders`, and press `Rescan`.
+4. You're done when `Yamamoto Works` → `Vinyl Tracer` appears in the plug-in list.
 
-### アップデート
+### Update
 
-`C:\Program Files\Common Files\VST3\` にある古い `Vinyl Tracer.vst3` を削除してから、新しいものをコピーしてください。保存した Live セットの設定はそのまま引き継がれます。
+Delete the old `Vinyl Tracer.vst3` in `C:\Program Files\Common Files\VST3\`, then copy in the new one. Settings saved in your Live Sets carry over.
 
-### アンインストール
+### Uninstall
 
-`C:\Program Files\Common Files\VST3\Vinyl Tracer.vst3` フォルダを削除します。
+Delete the `C:\Program Files\Common Files\VST3\Vinyl Tracer.vst3` folder.
 
 ## macOS
 
-インストーラ（`VinylTracer-<バージョン>-macOS.pkg`）で、VST3 と Audio Unit（AU）を入れます。インストーラもプラグインも Apple の公証済みです。
+The installer (`VinylTracer-<version>-macOS.pkg`) installs both VST3 and Audio Unit (AU). The installer and the plug-ins are notarized by Apple.
 
-### インストール
+### Install
 
-1. `VinylTracer-<バージョン>-macOS.pkg` をダブルクリックし、画面の指示に従います（最後に管理者のパスワードを求められます）。
-   - 次の場所に入ります。VST3 と AU のどちらか一方だけにしたい場合は、途中の `カスタマイズ` で選べます。
+1. Double-click `VinylTracer-<version>-macOS.pkg` and follow the instructions (you'll be asked for an administrator password at the end).
+   - The plug-ins go to the locations below. To install only VST3 or only AU, choose `Customize` during installation.
 
-   | 形式 | インストール先 |
+   | Format | Location |
    | --- | --- |
    | VST3 | `/Library/Audio/Plug-Ins/VST3/Vinyl Tracer.vst3` |
    | AU | `/Library/Audio/Plug-Ins/Components/Vinyl Tracer.component` |
 
-2. DAW を起動し、プラグインを再スキャンします。
-   - Ableton Live：`Live` → `Settings` → `Plug-Ins` で、VST3 を使う場合は `Use VST3 Plug-In System Folders`、AU を使う場合は `Use Audio Units` をオンにし、`Rescan` を押します。
-3. プラグインの一覧に `Yamamoto Works` → `Vinyl Tracer` が出れば完了です。
+2. Start your DAW and rescan plug-ins.
+   - Ableton Live: open `Live` → `Settings` → `Plug-Ins`, turn on `Use VST3 Plug-In System Folders` for VST3 or `Use Audio Units` for AU, and press `Rescan`.
+3. You're done when `Yamamoto Works` → `Vinyl Tracer` appears in the plug-in list.
 
-うまくいかないとき：
+Troubleshooting:
 
-- **入力に信号が来ない**：`システム設定` → `プライバシーとセキュリティ` → `マイク` で、DAW（Ableton Live など）を許可してください。
-- **AU が一覧に出ない**：一度ログアウトしてログインし直すか、Mac を再起動してから再スキャンしてください。
-- **Vinyl Tracer が2つ出る**：以前に手で `~/Library/Audio/Plug-Ins/`（ホームフォルダのライブラリ）へコピーしたものが残っています。そちらを削除してください。
+- **No input signal**: in `System Settings` → `Privacy & Security` → `Microphone`, allow your DAW (Ableton Live, etc.).
+- **The AU doesn't show up**: log out and back in, or restart your Mac, then rescan.
+- **Vinyl Tracer shows up twice**: a copy you placed by hand in `~/Library/Audio/Plug-Ins/` (the Library in your home folder) is still there. Delete it.
 
-### アップデート
+### Update
 
-新しいバージョンのインストーラを実行すると、上書きされます。保存した Live セットの設定はそのまま引き継がれます。
+Run the installer for the new version; it overwrites the old one. Settings saved in your Live Sets carry over.
 
-### アンインストール
+### Uninstall
 
-Finder で `移動` → `フォルダへ移動…`（⇧⌘G）を選び、次の2つを削除します。
+In the Finder, choose `Go` → `Go to Folder…` (⇧⌘G) and delete these two items:
 
 - `/Library/Audio/Plug-Ins/VST3/Vinyl Tracer.vst3`
 - `/Library/Audio/Plug-Ins/Components/Vinyl Tracer.component`
 
-## 最初の設定（Ableton Live）
+## First-time setup (Ableton Live)
 
-1. オーディオトラックを作り、入力をターンテーブルがつながっているチャンネル（ステレオ）にします。モニターは **In** にします。
-2. トラックに `Vinyl Tracer` を挿します。
-3. `Load Sample...` を押すか、オーディオファイルをウィンドウにドラッグ＆ドロップしてサンプルを読み込みます。
-4. `Timecode` を使うレコードの面（Side A / Side B）に合わせます。
-5. レコードを再生します。左のスコープに円が出て、下の表示が `SIGNAL ok / CODE ok / ABS ok` になれば準備完了です。
-   - 入力レベルのメーターが緑の範囲に入るように、オーディオインターフェイスの入力ゲインを調整してください。
-6. Live のバッファサイズは 64〜128 サンプルをおすすめします。遅延はほぼバッファサイズで決まります。
+1. Create an audio track and set its input to the channel your turntable is connected to (stereo). Set Monitor to **In**.
+2. Insert `Vinyl Tracer` on the track.
+3. Press `Load Sample...`, or drag and drop an audio file onto the window, to load a sound.
+4. Set `Timecode` to the side of the record you're using (Side A / Side B).
+5. Play the record. You're ready when a circle appears in the scope on the left and the status below reads `SIGNAL ok / CODE ok / ABS ok`.
+   - Adjust the input gain on your audio interface so the input level meter stays in the green.
+6. A buffer size of 64–128 samples is recommended in Live. Latency is mostly set by the buffer size.
 
-各パラメータとキューの使い方は [README.md](README.md) の「Ableton Live での使い方」を見てください。
+For details on each parameter and on cue points, see "Ableton Live での使い方" (Using it in Ableton Live) in [README.md](README.md) (currently in Japanese only).
 
-## ライセンス
+## License
 
-Vinyl Tracer は GNU Affero General Public License v3.0 またはそれ以降のバージョン（`AGPL-3.0-or-later`）で配布しています。本文は [LICENSE.md](LICENSE.md)、埋め込んでいるフォントのライセンスは `fonts/` フォルダにあります。ソースコードは https://github.com/yamamo2shun1/vinyl-tracer で公開しています。
+Vinyl Tracer is distributed under the GNU Affero General Public License v3.0 or any later version (`AGPL-3.0-or-later`). The full text is in [LICENSE.md](LICENSE.md), and the licenses for the embedded fonts are in the `fonts/` folder. The source code is available at https://github.com/yamamo2shun1/vinyl-tracer.
