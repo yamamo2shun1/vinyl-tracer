@@ -76,16 +76,7 @@ img { max-width: 100%; height: auto; }
 .card .metric { margin-top: auto; padding-top: 20px; font-family: var(--mono); font-size: 12px; color: var(--dim); }
 .metric b { display: block; font-size: 28px; color: var(--accent); font-weight: 700; line-height: 1.3; }
 
-.points { list-style: none; padding: 0; margin: 40px 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 14px 32px; }
-.points li { padding-left: 18px; position: relative; color: #c9c9cd; font-size: 15px; }
-.points li::before { content: ""; position: absolute; left: 0; top: .72em; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
-.points b { color: var(--text); }
 
-.steps { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; counter-reset: s; }
-.steps li { counter-increment: s; background: var(--bg); border: 1px solid var(--raised); border-radius: 12px; padding: 24px 22px; }
-.steps li::before { content: "0" counter(s); display: block; font-family: var(--mono); font-weight: 700; color: var(--accent); font-size: 13px; margin-bottom: 8px; }
-.steps h3 { font-size: 17px; margin-bottom: 8px; }
-.steps p { margin: 0; font-size: 14px; color: #c9c9cd; }
 
 
 .dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 32px; }
@@ -102,14 +93,11 @@ img { max-width: 100%; height: auto; }
   .hero-inner { grid-template-columns: 1fr; }
   .scope { justify-self: center; max-width: 340px; }
   .cards, .dl { grid-template-columns: 1fr; }
-  .steps { grid-template-columns: 1fr 1fr; }
-  .points { grid-template-columns: 1fr; }
 }
 @media (max-width: 640px) {
   .wrap { padding: 0 16px; }
   .nav nav a:not(.gh) { display: none; }
   .hero { padding: 48px 0 24px; }
   .section { padding: 64px 0; }
-  .steps { grid-template-columns: 1fr; }
   .sp-hide { display: none; }
 }

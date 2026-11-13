@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Vinyl Tracer</title>
-<meta name="description" content="Serato CV02 / CV02.5 のタイムコード盤で、プラグインに読み込んだサンプルをスクラッチする VST3 / AU プラグイン。">
+<meta name="description" content="Serato の Control Vinyl（CV02 / CV02.5）で、プラグインに読み込んだ音源をスクラッチする VST3 / AU プラグイン。">
 <meta property="og:title" content="Vinyl Tracer">
-<meta property="og:description" content="Serato のタイムコード盤で、プラグインに読み込んだサンプルをスクラッチ。VST3 / AU（Windows・macOS）。">
+<meta property="og:description" content="Serato の Control Vinyl で、プラグインに読み込んだ音源をスクラッチ。VST3 / AU（Windows・macOS）。">
 <meta property="og:type" content="website">
 <meta name="theme-color" content="#0a0a0b">
 <link rel="icon" href="assets/vinyl-tracer-mark-dark.svg" type="image/svg+xml">
@@ -19,7 +19,6 @@
     <a class="brand" href="#top"><img src="assets/vinyl-tracer-mark-dark.svg" alt="" width="54" height="34">Vinyl Tracer</a>
     <nav>
       <a href="#features">特長</a>
-      <a href="#usage">使い方</a>
       <a href="#download">ダウンロード</a>
       <a href="https://github.com/yamamo2shun1/vinyl-tracer" class="gh">GitHub</a>
     </nav>
@@ -33,8 +32,8 @@
     <div class="hero-text">
       <p class="eyebrow">TIMECODE SCRATCH / VST3 · AU</p>
       <h1>Vinyl Tracer</h1>
-      <p class="lead">Serato のタイムコード盤で、<br class="sp-hide">プラグインに読み込んだサンプルをスクラッチ。</p>
-      <p class="sub">曲を作りながら「このフレーズ、スクラッチしたらどうなる？」を、すぐに試すためのプラグインです。</p>
+      <p class="lead">Serato の Control Vinyl で、<br class="sp-hide">プラグインに読み込んだ音源をスクラッチ。</p>
+      <p class="sub">DAW での曲作り中にひらめいた「このシンセの音、スクラッチしたい！」を、そのまま形にできるプラグイン。</p>
       <div class="cta">
         <a class="btn primary" href="https://github.com/yamamo2shun1/vinyl-tracer/releases/latest">ダウンロード</a>
         <a class="btn" href="https://github.com/yamamo2shun1/vinyl-tracer">ソースコード</a>
@@ -43,7 +42,7 @@
         <li>Windows 10 / 11 · VST3</li>
         <li>macOS 11+ · VST3 / AU</li>
         <li>Serato CV02 / CV02.5</li>
-        <li>無料 · AGPL-3.0</li>
+        <li>オープンソース · AGPL-3.0</li>
       </ul>
     </div>
     <figure class="scope">
@@ -82,25 +81,27 @@
         <p class="metric"><b>0.5 %</b> 1コアあたりの負荷</p>
       </article>
     </div>
-    <ul class="points">
-      <li><b>配線は自動判定</b>　L/R の入れ替えや極性の反転があっても、8 通りの組み合わせを並行して試して自動でロックします。</li>
-      <li><b>Absolute / Relative</b>　針の位置＝サンプルの位置にするか、動きだけを使うかを選べます。</li>
-      <li><b>キューポイント 6 個</b>　好きな位置を登録して、そこから再生できます。</li>
-      <li><b>針飛びに強い</b>　針の載せ替え・溝飛びではクロスフェードで位置を移し、クリックを抑えます。</li>
-    </ul>
   </div>
 </section>
 
-<section id="usage" class="section alt">
+<section id="more" class="section alt">
   <div class="wrap">
-    <h2><span class="num">02</span>使い方（Ableton Live の例）</h2>
-    <ol class="steps">
-      <li><h3>入力をつなぐ</h3><p>オーディオトラックの入力を、ターンテーブルがつながっているチャンネル（ステレオ）にし、モニターを <code>In</code> にします。</p></li>
-      <li><h3>プラグインを挿す</h3><p>トラックに <code>Vinyl Tracer</code> を挿し、<code>Load Sample...</code> かドラッグ＆ドロップでサンプルを読み込みます。</p></li>
-      <li><h3>面を合わせる</h3><p><code>Timecode</code> を使うレコードの面（Side A / Side B）に合わせます。</p></li>
-      <li><h3>レコードを回す</h3><p>スコープに円が出て <code>SIGNAL ok / CODE ok / ABS ok</code> になれば準備完了。あとはスクラッチするだけです。</p></li>
-    </ol>
-    <p class="note">バッファサイズは 64〜128 サンプルがおすすめです（遅延はほぼバッファサイズで決まります）。パラメータとキューの詳しい使い方は <a href="https://github.com/yamamo2shun1/vinyl-tracer#ableton-live-での使い方">README</a> を見てください。</p>
+    <h2><span class="num">02</span>その他の特徴</h2>
+    <div class="cards">
+      <article class="card">
+        <h3>キャリブレーションの自動化</h3>
+        <p>DJ ソフトウェアでは必須のタイムコードのキャリブレーションを自動化し、調整を容易にしました。また、L/R の入れ替えや極性の反転にも自動で対応。</p>
+      </article>
+      <article class="card">
+        <h3>キューポイント</h3>
+        <p>DJ でおなじみの機能を搭載。長い音源でも、好きな位置からすぐにスクラッチできます。</p>
+      </article>
+      <article class="card">
+        <h3>オープンソース</h3>
+        <p>ソースコードは GitHub ですべて公開しています。あなたのアイデアを AI とともに実現させることも可能です。</p>
+      </article>
+    </div>
+    <p class="note">バッファサイズは 64〜128 サンプルがおすすめです（遅延はほぼバッファサイズで決まります）。</p>
   </div>
 </section>
 
@@ -118,7 +119,7 @@
       </div>
       <div class="dl-item">
         <h3>必要なもの</h3>
-        <p>Serato CV02 / CV02.5 のコントロール・ヴァイナルとターンテーブル、ステレオ入力のオーディオインターフェイス</p>
+        <p>Serato の Control Vinyl（CV02 / CV02.5）とターンテーブル、ステレオ入力のオーディオインターフェイス</p>
       </div>
     </div>
     <div class="cta">
@@ -133,8 +134,8 @@
 
 <footer class="footer">
   <div class="wrap">
-    <p>Vinyl Tracer は <a href="https://github.com/yamamo2shun1/vinyl-tracer/blob/main/LICENSE.md">GNU AGPL v3.0 以降</a>で公開しています。プラグインは <a href="https://juce.com/">JUCE</a> を使用し、フォントは <a href="https://github.com/floriankarsten/space-grotesk">Space Grotesk</a> と <a href="https://github.com/JetBrains/JetBrainsMono">JetBrains Mono</a>（SIL OFL 1.1）です。</p>
-    <p>Serato、CV02 は Serato 社の商標です。Vinyl Tracer は同社とは関係がなく、対応するタイムコード盤を示すためだけに名前を使っています。</p>
+    <p>Vinyl Tracer は <a href="https://github.com/yamamo2shun1/vinyl-tracer/blob/main/LICENSE.md">GNU AGPL v3.0 以降</a>で公開しています。開発には <a href="https://juce.com/">JUCE</a> を、フォントには <a href="https://github.com/floriankarsten/space-grotesk">Space Grotesk</a> と <a href="https://github.com/JetBrains/JetBrainsMono">JetBrains Mono</a>（SIL OFL 1.1）を使用しています。</p>
+    <p>Serato は Serato 社の商標です。Vinyl Tracer は同社とは関係がなく、対応するレコードを示すためだけに名前を使っています。</p>
     <p class="copy">© 2026 Shunichi Yamamoto / Yamamoto Works</p>
   </div>
 </footer>
