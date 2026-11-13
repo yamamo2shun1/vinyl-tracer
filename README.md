@@ -1,10 +1,10 @@
 # Vinyl Tracer
 <img width="360" alt="vinyl-tracer-logo" src="https://github.com/user-attachments/assets/45076452-736b-4173-b864-8e0acde0948c" />
 
-# Screenshot
+## Screenshot
 <img width="640" alt="image" src="https://github.com/user-attachments/assets/64bdb228-0261-4450-9cb5-51c13218a4b4" />
 
-# Description
+## Description
 Ableton Live などのDAWで、Serato CV02 / CV02.5 のコントロール・ヴァイナルを使い、プラグインに読み込んだサンプルをスクラッチするための VST3 プラグインです。
 DAWで曲を作りながら、「あ、このフレーズ、スクラッチしたらどうなるだろう？」という思いつきを、すぐに試したい、そんな思いで開発しました。
 
@@ -60,7 +60,7 @@ docs/      テスト結果
 - 位置ジッタ（100Hz以上）は16µs RMSで、1サンプル（20.8µs）未満でした。
 - 0.2ms程度の一定オフセットがあります。カートリッジとRIAAの位相によるもので、固定の遅延と同じなので聴感上の問題はありません。
 
-**注意**：これは合成信号での結果です。実際のSerato盤では、ビットの振幅変調がどちらのピークにかかっているかなど、まだ確かめていない点があります。次の「実機WAVでの確認」で検証してください。
+**注意**：上の数値は合成信号での結果です。実機の Serato 盤（CV02 / CV02.5）でも、ロックしてスクラッチ再生できることを確認しています。お使いの環境の信号は、次の「実機WAVでの確認」の方法で確かめられます。
 
 ## ビルド
 
@@ -79,15 +79,16 @@ cmake --build build --config Release
 - macOSではAU（`.component`）もできます。
 - テストとツールだけをビルドする場合は `-DVT_BUILD_PLUGIN=OFF` を付けます（JUCE不要）。
 
-> この試作のプラグイン層（`plugin/`）は、JUCEがない環境で書いたため一度もコンパイルしていません。最初のビルドで小さな修正が必要になる可能性があります。`core/`、`tests/`、`tools/` はビルドとテストまで済んでいます。
-
 ## Ableton Live での使い方
 
 1. オーディオトラックを作り、入力をターンテーブルがつながっているオーディオIFのチャンネルにします（例：JUMBLEQのUSB入力 1/2）。モニターは **In** にします。
 2. トラックに「Vinyl Tracer」を挿します。
 3. `Load Sample...` を押すか、ドラッグ＆ドロップでサンプルを読み込みます。
 4. レコードを再生します。スコープに円が出て、`SIGNAL ok / CODE ok / ABS ok` になれば準備完了です。
-5. 針を置いた位置でサンプルの頭を決めたいときは `Set Cue Here` を押します。何もしなければ、最初にロックした位置がサンプルの頭になります。
+5. 何もしなければ、最初にロックした位置がサンプルの頭になります。好きな位置から始めたいときは、Cue の 1〜6 のボタンを使います。
+   - Ctrl＋クリック（macOS は Cmd＋クリック）：今の再生位置をキューとして登録（上書き）します。
+   - クリック：そのキューの位置から再生します（空のボタンでは何も起きません）。
+   - Alt＋クリック（macOS は Option＋クリック）：キューを削除します。
 6. Liveのバッファサイズは64〜128サンプルにしてください。遅延はほぼバッファサイズで決まります。
 
 各パラメータの意味は次のとおりです。
@@ -101,8 +102,8 @@ cmake --build build --config Release
 | Output | 出力ゲイン |
 | Timecode Thru | 入力のタイムコードをそのまま出力する（配線確認用） |
 | Loop | サンプルをループさせる |
-| Wave View | 波形のスクロールビューの表示幅 |
-| Cue | キューポイントの設定 |
+| Wave view | 波形のスクロールビューの表示幅 |
+| Cue | キューポイントの登録・呼び出し・削除（6個） |
 
 ## 実機WAVでの確認（おすすめ）
 
@@ -120,8 +121,6 @@ cmake --build build --config Release
 ```
 
 ロックするまでの時間、ロックしている割合、補正の回数、検出した配線の設定が表示されます。CSVには1msごとのレコード位置・速度・ロック状態が出るので、グラフにすれば位置の飛びや低速での追従を確認できます。
-
-ロックしない、または補正回数が多い場合は、録音したWAVを送ってもらえれば、それに合わせて解析を調整します。
 
 ## 未対応・次の作業
 
@@ -142,4 +141,4 @@ Vinyl Tracer は [GNU Affero General Public License v3.0](LICENSE.md)（また�
   - [Space Grotesk](https://github.com/floriankarsten/space-grotesk)（プラグイン名）：[fonts/OFL-SpaceGrotesk.txt](fonts/OFL-SpaceGrotesk.txt)
   - [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono)（そのほかの文字）：[fonts/OFL-JetBrainsMono.txt](fonts/OFL-JetBrainsMono.txt)
 
-Serato、CV02 はSerato社の商標です。Vinyl Tracer はこれらの会社とは関係がなく、対応するタイムコード盤を示すためだけに名前を使っています。
+Serato、CV02 はSerato社の商標です。Vinyl Tracer は同社とは関係がなく、対応するタイムコード盤を示すためだけに名前を使っています。
