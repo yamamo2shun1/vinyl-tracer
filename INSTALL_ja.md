@@ -8,7 +8,7 @@
 ## 必要なもの
 
 - Windows 10 / 11（64ビット）、または macOS 11 以降（Apple シリコン / Intel）
-- VST3 または Audio Unit に対応した DAW（動作確認は Windows 11 ＋ Ableton Live 12、macOS 26 ＋ Ableton Live 12）
+- VST3 または Audio Unit に対応した DAW（動作確認は Windows 11 ＋ Ableton Live 12、macOS 27 ＋ Ableton Live 12）
 - Serato CV02 / CV02.5 のコントロール・ヴァイナルと、ターンテーブル
 - ターンテーブルの信号をステレオでパソコンに入力できるオーディオインターフェイス
 
