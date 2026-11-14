@@ -60,7 +60,10 @@
 <section class="shot">
   <div class="wrap">
     <figure>
-      <img src="https://github.com/user-attachments/assets/64bdb228-0261-4450-9cb5-51c13218a4b4" alt="The Vinyl Tracer plugin window: the timecode scope on the left, a scrolling waveform in the middle, and parameters and cue buttons along the bottom." loading="lazy">
+      <video id="demo" autoplay muted loop playsinline preload="auto" poster="assets/demo-poster.jpg" aria-label="Scratching with Serato Control Vinyl while Vinyl Tracer follows the record in Ableton Live.">
+        <source src="assets/demo.webm" type="video/webm">
+        <source src="assets/demo.mp4" type="video/mp4">
+      </video>
     </figure>
   </div>
 </section>
@@ -141,6 +144,13 @@
   </div>
 </footer>
 
+<script>
+  // Respect "reduce motion": keep the demo video on its poster frame.
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    const v = document.getElementById("demo");
+    if (v) { v.removeAttribute("autoplay"); v.pause(); }
+  }
+</script>
 <script src="scope.js"></script>
 </body>
 </html>

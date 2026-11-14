@@ -60,7 +60,10 @@
 <section class="shot">
   <div class="wrap">
     <figure>
-      <img src="https://github.com/user-attachments/assets/64bdb228-0261-4450-9cb5-51c13218a4b4" alt="Vinyl Tracer のプラグイン画面。左にタイムコードのスコープ、中央に波形のスクロールビュー、下にパラメータとキューボタン。" loading="lazy">
+      <video id="demo" autoplay muted loop playsinline preload="auto" poster="../assets/demo-poster.jpg" aria-label="Serato Control Vinyl でスクラッチし、Ableton Live 上の Vinyl Tracer がレコードに追従している様子。">
+        <source src="../assets/demo.webm" type="video/webm">
+        <source src="../assets/demo.mp4" type="video/mp4">
+      </video>
     </figure>
   </div>
 </section>
@@ -141,6 +144,13 @@
   </div>
 </footer>
 
+<script>
+  // Respect "reduce motion": keep the demo video on its poster frame.
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    const v = document.getElementById("demo");
+    if (v) { v.removeAttribute("autoplay"); v.pause(); }
+  }
+</script>
 <script src="../scope.js"></script>
 </body>
 </html>
