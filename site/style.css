@@ -59,8 +59,8 @@ img { max-width: 100%; height: auto; }
 
 /* Screenshot */
 .shot { padding: 24px 0 24px; }
-.shot figure { margin: 0; border: 1px solid var(--raised); border-radius: 12px; overflow: hidden; background: var(--panel); }
-.shot img, .shot video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; }
+.shot figure { max-width: 860px; margin: 0 auto; padding: 10px; border: 1px solid var(--outline); border-radius: 18px; background: var(--panel); box-shadow: 0 24px 60px rgba(0, 0, 0, .45); }
+.shot img, .shot video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 10px; }
 
 /* Sections */
 .section { padding: 88px 0; }
