@@ -41,7 +41,7 @@ constexpr double kLockLost       = 0.15;  // mean |residual| (turns) above which
 constexpr double kLiftMinSpeed   = 0.3;   // carrier lost above this speed -> needle lifted
 constexpr double kWeightMaxSpeed = 0.1;     // magnitude weighting only below this (10 ms average speed)
 constexpr double kReversalWeightSpeed = 0.2; // ... and at the turn of a reversal (instantaneous speed)
-constexpr double kMaxSlipCycles  = 50.0;  // larger corrections are not tracker slips (relative mode)
+constexpr double kSecondsPerRev  = 1.8;   // one revolution at 33 1/3 rpm (a groove skip, ignored in relative mode)
 #ifndef VT_ROUGH_LOW
 #define VT_ROUGH_LOW 0.05
 #endif
@@ -386,9 +386,10 @@ void TimecodeDecoder::processSample (float xl, float xr) noexcept
         const double d    = offsetTarget_ - offset_;
         offset_ = (std::abs (d) <= step) ? offsetTarget_ : offset_ + (d > 0 ? step : -step);
     }
-    // Tracker slips also go into the relative position (slewed like the small
-    // absolute corrections), or they pile up in Relative mode and the cue
-    // point wanders when the record is pulled back over and over.
+    // Tracker slips also go into the relative position (small ones slewed,
+    // large ones jump, like the absolute corrections), or they pile up in
+    // Relative mode and the cue point wanders when the record is pulled back
+    // over and over.
     if (relCorr_ != relCorrTarget_)
     {
         const double step = kSlewPerSec / sr_;
@@ -557,10 +558,17 @@ void TimecodeDecoder::onCrossing (int primary, float primaryValue) noexcept
                     std::fprintf (stderr, "reanchor diff=%+.3f V=%+.4f dir=%d valid=%d\n", diff, V_, dir, h.valid);
 #endif
                     // The needle stayed on the record, so this is a tracker
-                    // slip (however large): the relative position gets it
-                    // too, slewed. Needle drops are the stale_ branch above.
-                    if (std::abs (offsetNew - offsetTarget_) < kMaxSlipCycles)
-                        relCorrTarget_ += offsetNew - offsetTarget_;
+                    // slip, a groove skip (whole revolutions) or both. Slips
+                    // come from the stylus skating when the record is caught
+                    // and pulled back (5..90 cycles, nearly always the same
+                    // sign), so the relative position gets them too, except
+                    // whole revolutions: a groove skip does not turn the
+                    // record. Needle drops are the stale_ branch above.
+                    const double rev  = t.def().resolution * kSecondsPerRev;
+                    const double slip = diff - rev * std::round (diff / rev);
+                    relCorrTarget_ += slip;
+                    if (std::abs (slip) > kJumpCycles)
+                        relCorr_ = relCorrTarget_; // large: jump (the player cross-fades it)
                     offsetTarget_ = offsetNew;
                     if (std::abs (diff) > kJumpCycles)
                         offset_ = offsetNew; // large: jump the absolute position
