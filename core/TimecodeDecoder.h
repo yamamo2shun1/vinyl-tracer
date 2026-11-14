@@ -94,6 +94,8 @@ private:
 
     void processSample (float xl, float xr) noexcept;
     void onCrossing (int primary, float primaryValue) noexcept;
+    void fastRead (float amplitude, int dir, double rel, double absSpeed) noexcept;
+    void correct (double offsetNew, double diff) noexcept;
     void updateLoopGains (double absSpeed) noexcept;
 
     static int hypIndex (int primary, int polarity, int dir) noexcept { return primary * 4 + polarity * 2 + dir; }
@@ -161,6 +163,20 @@ private:
     double speedNow_ = 0.0;
     int    mismatch_ = 0;
     int    reanchors_ = 0;
+
+    // Fast correction while anchored: bits of the selected peak type, each
+    // compared with the mean of its 3 + 3 neighbours, searched for near the
+    // predicted position with a few bit errors allowed.
+    struct FastPeak { float a; double rel, speed; };
+    FastPeak fastRing_[7] {};
+    int      fastN_ = 0;
+    int      fastDir_ = 0;
+    uint64_t fastBits_ = 0;
+    int      fastCount_ = 0;
+    int      fastAgree_ = 0;
+    double   fastDiff_ = 0.0;
+    bool     fastSynced_ = false;
+    bool     fastLost_ = false; // the input was not a carrier since the last match (search wide)
 
     DecoderStatus status_;
 };
