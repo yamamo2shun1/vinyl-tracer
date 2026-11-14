@@ -1,5 +1,5 @@
 # Vinyl Tracer
-<img width="360" alt="vinyl-tracer-logo" src="https://github.com/user-attachments/assets/45076452-736b-4173-b864-8e0acde0948c" />
+<img width="360" alt="vinyl-tracer-logo" src="https://github.com/user-attachments/assets/9246e534-5226-47a9-b0ea-7e0f56ad269d" />
 
 ## Screenshot
 <img width="640" alt="image" src="https://github.com/user-attachments/assets/64bdb228-0261-4450-9cb5-51c13218a4b4" />
