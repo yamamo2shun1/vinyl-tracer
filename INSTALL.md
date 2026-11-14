@@ -8,7 +8,7 @@ English | [日本語](INSTALL_ja.md)
 ## Requirements
 
 - Windows 10 / 11 (64-bit), or macOS 11 or later (Apple silicon / Intel)
-- A DAW that supports VST3 or Audio Units (tested on Windows 11 + Ableton Live 12 and macOS 26 + Ableton Live 12)
+- A DAW that supports VST3 or Audio Units (tested on Windows 11 + Ableton Live 12 and macOS 27 + Ableton Live 12)
 - Serato CV02 / CV02.5 Control Vinyl and a turntable
 - An audio interface that can send the turntable signal to your computer in stereo
 
