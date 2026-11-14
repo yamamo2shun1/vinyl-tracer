@@ -66,8 +66,9 @@ public:
 
     // Decode a block. Any output pointer may be null.
     //  posAbs : absolute position in cycles (tracked phase + anchor)
-    //  posRel : tracked phase plus slewed slip corrections (cycles), never jumps
-    //           (needle drops are ignored, tracker slips are not left in)
+    //  posRel : tracked phase plus slip corrections (cycles); needle drops and
+    //           groove skips are ignored, tracker slips are not left in (small
+    //           ones slewed, large ones jump like posAbs)
     //  speed  : 1.0 = nominal
     //  quality: 1 = clean carrier, falling to 0 while the input is not one
     //           (stylus skating / skipping; the position follows noise there)
