@@ -61,6 +61,9 @@ img { max-width: 100%; height: auto; }
 .shot { padding: 24px 0 24px; }
 .shot figure { max-width: 860px; margin: 0 auto; padding: 10px; border: 1px solid var(--outline); border-radius: 18px; background: var(--panel); box-shadow: 0 24px 60px rgba(0, 0, 0, .45); }
 .shot img, .shot video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 10px; }
+.shot.ui-shot { padding: 0 0 88px; }
+.ui-shot img { aspect-ratio: auto; }
+.shot-caption { font-size: 13px; color: var(--dim); text-align: center; margin: 14px 0 0; }
 
 /* Sections */
 .section { padding: 88px 0; }
