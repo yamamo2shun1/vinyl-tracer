@@ -55,6 +55,21 @@ public:
     // Index (cycle number) of a state, or -1 if the state is not on the record.
     int32_t lookup (uint32_t s) const noexcept { return lut_[s & mask_]; }
 
+    // The 64 bits pressed up to cycle n: bit k is the bit at cycle n - k
+    // (0 outside the record). Used to search for a bit pattern near a
+    // predicted position.
+    uint64_t history (int32_t n) const noexcept
+    {
+        if (n < 0 || n >= int32_t (def_.length))
+            return 0;
+        const uint32_t p = def_.length - 1u - uint32_t (n); // bit k of the result is at p + k
+        const uint32_t w = p >> 6, sh = p & 63u;
+        uint64_t v = hist_[w] >> sh;
+        if (sh != 0)
+            v |= hist_[w + 1] << (64u - sh);
+        return v;
+    }
+
     // Bit that is pressed at cycle index n (the MSB of the state at n).
     // Only used by the test signal generator.
     static uint32_t parity (uint32_t v) noexcept
@@ -67,6 +82,7 @@ private:
     TimecodeDef          def_;
     uint32_t             mask_;
     std::vector<int32_t> lut_;
+    std::vector<uint64_t> hist_; // bit (length - 1 - n) = bit pressed at cycle n
 };
 
 } // namespace vt

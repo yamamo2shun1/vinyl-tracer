@@ -42,6 +42,21 @@ constexpr double kLiftMinSpeed   = 0.3;   // carrier lost above this speed -> ne
 constexpr double kWeightMaxSpeed = 0.1;     // magnitude weighting only below this (10 ms average speed)
 constexpr double kReversalWeightSpeed = 0.2; // ... and at the turn of a reversal (instantaneous speed)
 constexpr double kSecondsPerRev  = 1.8;   // one revolution at 33 1/3 rpm (a groove skip, ignored in relative mode)
+constexpr int    kFastBits       = 40;    // bits compared by the fast correction
+constexpr int    kFastMaxErrors  = 3;     // ... of which this many may be misread
+constexpr int    kFastRange      = 256;   // cycles searched either side of the predicted position
+constexpr int    kFastWideRange  = 2048;  // ... after the input was not a carrier (skating, skipping)
+constexpr double kFastMaxSpeed   = 6.0;   // bits are read up to this speed (whole cycles only above 2x)
+constexpr double kFastMinSpeed   = 0.3;   // the bits must be read in one run in one direction above this
+constexpr int    kFastConfirm    = 3;     // matches giving the same correction before it is applied
+
+inline int popcount64 (uint64_t v) noexcept
+{
+    v = v - ((v >> 1) & 0x5555555555555555ull);
+    v = (v & 0x3333333333333333ull) + ((v >> 2) & 0x3333333333333333ull);
+    v = (v + (v >> 4)) & 0x0f0f0f0f0f0f0f0full;
+    return int ((v * 0x0101010101010101ull) >> 56);
+}
 #ifndef VT_ROUGH_LOW
 #define VT_ROUGH_LOW 0.05
 #endif
@@ -97,6 +112,8 @@ void TimecodeDecoder::setTable (const LfsrTable* table)
     stale_    = false;
     mismatch_ = 0;
     offset_ = offsetTarget_ = 0.0;
+    fastN_ = fastCount_ = fastAgree_ = 0;
+    fastSynced_ = fastLost_ = false;
 }
 
 void TimecodeDecoder::reset()
@@ -308,6 +325,15 @@ void TimecodeDecoder::processSample (float xl, float xr) noexcept
             V_ *= coast_; // following noise: let the speed die away
             A_ = 0.0;
         }
+        if (lockErr_ > kRoughHigh)
+        {
+            // Not a carrier (skating, skipping): the tracker may have lost any
+            // amount, so search wide, and only with bits read after this.
+            fastLost_ = true;
+            fastN_ = fastCount_ = fastAgree_ = 0;
+            fastSynced_ = false;
+        }
+
 
         // Frequency acquisition right after the gate opens (needle drop, record
         // starting under the needle): the loop alone cannot pull in from rest
@@ -441,6 +467,10 @@ void TimecodeDecoder::onCrossing (int primary, float primaryValue) noexcept
     const int nbits    = t.def().bits;
     const int trackDir = V_ >= 0.0 ? 1 : -1;
 
+    if (selected_ >= 0 && primary == selected_ / 4 && polarity == ((selected_ >> 1) & 1))
+        fastRead (std::abs (primaryValue), trackDir * ((selected_ & 1) == 0 ? 1 : -1),
+                  double (dirSign_) * X_ * 0.5 + relShift_, std::abs (speedNow_));
+
     for (int d = 0; d < 2; ++d)
     {
         const int idx = hypIndex (primary, polarity, d);
@@ -557,23 +587,7 @@ void TimecodeDecoder::onCrossing (int primary, float primaryValue) noexcept
 #ifdef VT_DEBUG
                     std::fprintf (stderr, "reanchor diff=%+.3f V=%+.4f dir=%d valid=%d\n", diff, V_, dir, h.valid);
 #endif
-                    // The needle stayed on the record, so this is a tracker
-                    // slip, a groove skip (whole revolutions) or both. Slips
-                    // come from the stylus skating when the record is caught
-                    // and pulled back (5..90 cycles, nearly always the same
-                    // sign), so the relative position gets them too, except
-                    // whole revolutions: a groove skip does not turn the
-                    // record. Needle drops are the stale_ branch above.
-                    const double rev  = t.def().resolution * kSecondsPerRev;
-                    const double slip = diff - rev * std::round (diff / rev);
-                    relCorrTarget_ += slip;
-                    if (std::abs (slip) > kJumpCycles)
-                        relCorr_ = relCorrTarget_; // large: jump (the player cross-fades it)
-                    offsetTarget_ = offsetNew;
-                    if (std::abs (diff) > kJumpCycles)
-                        offset_ = offsetNew; // large: jump the absolute position
-                    mismatch_ = 0;
-                    ++reanchors_;
+                    correct (offsetNew, diff);
                 }
             }
             else
@@ -581,6 +595,156 @@ void TimecodeDecoder::onCrossing (int primary, float primaryValue) noexcept
                 mismatch_ = 0;
             }
         }
+    }
+}
+
+void TimecodeDecoder::correct (double offsetNew, double diff) noexcept
+{
+    // The needle stayed on the record, so this is a tracker slip, a groove
+    // skip (whole revolutions) or both. Slips come from the stylus skating
+    // when the record is caught and pulled back (5..90 cycles, nearly always
+    // the same sign), so the relative position gets them too, except whole
+    // revolutions: a groove skip does not turn the record. Needle drops are
+    // the stale_ branch in onCrossing.
+    const double rev  = table_->def().resolution * kSecondsPerRev;
+    const double slip = diff - rev * std::round (diff / rev);
+    relCorrTarget_ += slip;
+    if (std::abs (slip) > kJumpCycles)
+        relCorr_ = relCorrTarget_; // large: jump (the player cross-fades it)
+    offsetTarget_ = offsetNew;
+    if (std::abs (diff) > kJumpCycles)
+        offset_ = offsetNew; // large: jump the absolute position
+    mismatch_ = 0;
+    fastAgree_ = 0;
+    ++reanchors_;
+}
+
+// Fast correction of slips while the position is known (anchored).
+//
+// After the record is caught and pulled back, the LFSR check needs about 45
+// consecutive correctly read bits (20 to flush a misread bit out of the
+// register, 24 to verify). While the hand moves the record the bit amplitude
+// is misread 10-15 % of the time (the 3 ms envelope lags the level changes),
+// so that took 50-250 ms into the forward stroke, and the stroke started from
+// the wrong position.
+//
+// Here each bit is decided against the mean of its neighbours of the same
+// peak type 3 cycles either side (3-5 % errors), and the last kFastBits bits
+// are looked for within kFastRange cycles of the predicted position, allowing
+// kFastMaxErrors misread bits. A match must be unambiguous and give the same
+// correction kFastConfirm times in a row. The bits are only used from one
+// unbroken run in one direction, so that consecutive peaks are consecutive
+// cycles.
+//
+// The slip happens when the record is caught, so the backward pull is
+// searched too and the forward stroke starts from the right place (only whole
+// cycles there, see below). The LFSR check above stays as it is: it makes the
+// first anchor, finds groove skips (outside kFastRange) and confirms these.
+void TimecodeDecoder::fastRead (float amplitude, int dir, double rel, double absSpeed) noexcept
+{
+    const bool usable = anchored_ && ! stale_ && absSpeed >= kFastMinSpeed;
+    if (! usable || (fastN_ > 0 && dir != fastDir_))
+    {
+        fastN_ = fastCount_ = fastAgree_ = 0;
+        fastSynced_ = false;
+        if (! usable)
+            return;
+    }
+    fastDir_ = dir;
+
+    for (int k = 6; k > 0; --k)
+        fastRing_[k] = fastRing_[k - 1];
+    fastRing_[0] = { amplitude, rel, absSpeed };
+    if (fastN_ < 7)
+    {
+        ++fastN_;
+        if (fastN_ < 7)
+            return;
+    }
+
+    const FastPeak& mid = fastRing_[3];
+    float sum = 0.f;
+    for (int k = 0; k < 7; ++k)
+        if (k != 3)
+            sum += fastRing_[k].a;
+    fastBits_ = (fastBits_ << 1) | (mid.a * 6.f > sum ? 1u : 0u);
+    if (fastCount_ < kFastBits)
+        ++fastCount_;
+    if (fastCount_ < kFastBits || mid.speed > kFastMaxSpeed)
+        return;
+    // Readings give the exact position only forward in the flat RIAA region
+    // (see onCrossing); elsewhere they can be half a cycle off.
+    const bool exact = dir > 0 && mid.speed >= kAnchorMinSpeed && mid.speed <= kAnchorMaxSpeed;
+
+    const uint64_t mask = (kFastBits >= 64) ? ~uint64_t (0) : ((uint64_t (1) << kFastBits) - 1u);
+    // Forward, bit k of the word is the bit of cycle n - k (n = the newest);
+    // backward it is the bit of cycle n + k, so the word is mirrored and
+    // compared with the history ending kFastBits - 1 cycles later.
+    uint64_t word = fastBits_ & mask;
+    int32_t  shift = 0;
+    if (dir < 0)
+    {
+        uint64_t r = 0;
+        for (int k = 0; k < kFastBits; ++k)
+            r |= ((word >> k) & 1u) << (kFastBits - 1 - k);
+        word  = r;
+        shift = kFastBits - 1;
+    }
+    const int32_t pred = int32_t (std::lround (mid.rel + offsetTarget_));
+
+    // In step: only check the predicted position.
+    if (fastSynced_ && popcount64 ((word ^ table_->history (pred + shift)) & mask) <= kFastMaxErrors)
+        return;
+    fastSynced_ = false;
+
+    const int32_t range = fastLost_ ? kFastWideRange : kFastRange;
+    int best = kFastBits + 1, second = kFastBits + 1;
+    int32_t bestN = 0;
+    for (int32_t n = pred - range; n <= pred + range; ++n)
+    {
+        const int e = popcount64 ((word ^ table_->history (n + shift)) & mask);
+        if (e < best) { second = best; best = e; bestN = n; }
+        else if (e < second) second = e;
+    }
+    if (best > kFastMaxErrors || second <= best + 2)
+    {
+        fastAgree_ = 0;
+        return;
+    }
+
+    double offsetNew = double (bestN) - mid.rel;
+    double diff      = offsetNew - offsetTarget_;
+    if (! exact)
+    {
+        // Only whole cycles here (a half cycle may be the pickup / RIAA
+        // phase); the next forward stroke in the flat region settles the rest.
+        if (std::abs (diff) <= 0.5 + kReanchorTol)
+            diff = 0.0;
+        diff = std::round (diff);
+        offsetNew = offsetTarget_ + diff;
+    }
+    if (std::abs (diff) <= kReanchorTol)
+    {
+        fastAgree_ = 0;
+        fastSynced_ = true;
+        fastLost_ = false;
+        return;
+    }
+    if (fastAgree_ > 0 && std::abs (diff - fastDiff_) <= kReanchorTol)
+        ++fastAgree_;
+    else
+    {
+        fastAgree_ = 1;
+        fastDiff_  = diff;
+    }
+    if (fastAgree_ >= kFastConfirm)
+    {
+#ifdef VT_DEBUG
+        std::fprintf (stderr, "fast diff=%+.3f errors=%d\n", diff, best);
+#endif
+        correct (offsetNew, diff);
+        fastSynced_ = true;
+        fastLost_ = false;
     }
 }
 
