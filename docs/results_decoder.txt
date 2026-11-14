@@ -1,18 +1,22 @@
 LFSR self-test: OK
 
 Scenario (48 kHz, block 128, cartridge+RIAA, noise -60 dB, R gain 0.85, skew 8 deg)
-1x play 20 s                       lock    61.3 ms | offset -0.172 ms | p99  0.025 ms | max  0.032 ms | drift  -0.000 ms | stuck  0.00 % | reanchor 0 | cfg 0 |  55.2 ns/smp
-slow (0.2x..0.01x)                 lock    61.3 ms | offset -1.012 ms | p99  0.891 ms | max  1.032 ms | drift  -0.784 ms | stuck  0.00 % | reanchor 0 | cfg 0 |  44.0 ns/smp
-scratch 300 s (<=4x)               lock    66.7 ms | offset -0.222 ms | p99  0.790 ms | max  1.976 ms | drift  -0.169 ms | stuck  0.16 % | reanchor 151 | cfg 0 |  61.6 ns/smp
-scratch 300 s (<=8x flicks)        lock    66.7 ms | offset -0.266 ms | p99  1.022 ms | max  2.359 ms | drift  -0.054 ms | stuck  0.16 % | reanchor 134 | cfg 0 |  81.0 ns/smp
-needle drop (excl. 100 ms after)   lock    61.3 ms | offset -0.165 ms | p99  0.031 ms | max  0.039 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 2 | cfg 0 |  71.1 ns/smp
+1x play 20 s                       lock    61.3 ms | offset -0.172 ms | p99  0.025 ms | max  0.032 ms | drift  -0.000 ms | stuck  0.00 % | reanchor 0 | cfg 0 |  87.0 ns/smp | click 0.0015
+slow (0.2x..0.01x)                 lock    61.3 ms | offset -0.987 ms | p99  0.888 ms | max  1.060 ms | drift  -0.795 ms | stuck  0.00 % | reanchor 0 | cfg 0 |  73.8 ns/smp | click 0.0154
+scratch 300 s (<=4x)               lock    66.7 ms | offset -0.218 ms | p99  0.707 ms | max  1.296 ms | drift  -0.175 ms | stuck  0.18 % | reanchor 157 | cfg 0 |  90.3 ns/smp | click 0.0303
+scratch 300 s (<=8x flicks)        lock    66.7 ms | offset -0.256 ms | p99  0.731 ms | max  1.211 ms | drift  -0.076 ms | stuck  0.15 % | reanchor 149 | cfg 0 | 149.4 ns/smp | click 0.0746
+needle drop (excl. 100 ms after)   lock    61.3 ms | offset -0.165 ms | p99  0.031 ms | max  0.040 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 1 | cfg 0 | 111.7 ns/smp | click 0.0014
                                    re-lock after drop: 62.7 ms
-autodetect swap=0 invert=0         lock    61.3 ms | offset -0.172 ms | p99  0.025 ms | max  0.032 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 0 |  68.4 ns/smp
-autodetect swap=1 invert=0         lock    61.3 ms | offset -0.687 ms | p99  0.025 ms | max  0.032 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 7 |  74.8 ns/smp
-autodetect swap=0 invert=1         lock    61.3 ms | offset -0.172 ms | p99  0.025 ms | max  0.032 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 3 |  67.2 ns/smp
-autodetect swap=1 invert=1         lock    61.3 ms | offset -0.687 ms | p99  0.025 ms | max  0.032 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 4 |  58.8 ns/smp
-side B 1x play                     lock    42.7 ms | offset -0.157 ms | p99  0.025 ms | max  0.031 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 0 |  58.5 ns/smp
-scratch 30 s @ 44.1 kHz            lock    66.8 ms | offset -0.227 ms | p99  0.679 ms | max  0.816 ms | drift  -0.074 ms | stuck  0.23 % | reanchor 12 | cfg 0 |  72.3 ns/smp
-scratch 30 s @ 96.0 kHz            lock    68.0 ms | offset -0.209 ms | p99  0.632 ms | max  0.741 ms | drift  -0.043 ms | stuck  0.23 % | reanchor 12 | cfg 0 |  53.7 ns/smp
-scratch 30 s, noise/hum -40 dB     lock    85.3 ms | offset -0.682 ms | p99  7.836 ms | max  8.317 ms | drift  -0.310 ms | stuck  0.11 % | reanchor 16 | cfg 2 |  77.1 ns/smp
-scratch 30 s, block 1024           lock    64.0 ms | offset -0.215 ms | p99  1.471 ms | max  1.536 ms | drift  +0.188 ms | stuck  0.20 % | reanchor 18 | cfg 0 |  58.7 ns/smp
+autodetect swap=0 invert=0         lock    61.3 ms | offset -0.172 ms | p99  0.025 ms | max  0.032 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 0 | 131.0 ns/smp | click 0.0014
+autodetect swap=1 invert=0         lock    61.3 ms | offset -0.206 ms | p99  0.025 ms | max  0.032 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 5 | 112.3 ns/smp | click 0.0014
+autodetect swap=0 invert=1         lock    61.3 ms | offset -0.172 ms | p99  0.025 ms | max  0.032 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 3 | 108.8 ns/smp | click 0.0014
+autodetect swap=1 invert=1         lock    61.3 ms | offset -0.206 ms | p99  0.025 ms | max  0.032 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 6 | 109.6 ns/smp | click 0.0014
+side B 1x play                     lock    42.7 ms | offset -0.156 ms | p99  0.025 ms | max  0.031 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 0 | 110.9 ns/smp | click 0.0014
+scratch 30 s @ 44.1 kHz            lock    66.8 ms | offset -0.343 ms | p99  0.749 ms | max  1.015 ms | drift  -0.007 ms | stuck  0.23 % | reanchor 16 | cfg 0 | 112.9 ns/smp | click 0.0321
+scratch 30 s @ 96.0 kHz            lock    68.0 ms | offset -0.215 ms | p99  0.712 ms | max  1.076 ms | drift  -0.051 ms | stuck  0.26 % | reanchor 14 | cfg 0 | 108.7 ns/smp | click 0.0151
+scratch 30 s, noise/hum -40 dB     lock    66.7 ms | offset -0.242 ms | p99  2.206 ms | max 15.118 ms | drift  -0.130 ms | stuck  0.19 % | reanchor 23 | cfg 0 | 123.8 ns/smp | click 15.0053
+scratch 30 s, block 1024           lock    64.0 ms | offset -0.192 ms | p99  0.707 ms | max  1.074 ms | drift  +0.048 ms | stuck  0.20 % | reanchor 20 | cfg 0 | 118.2 ns/smp | click 0.0291
+back-cue 40x (1x / -2x)            relative position: end  -0.313 ms | max  0.318 ms | reanchor 0
+scratch 30 s, hand offset -12 dB   lock    66.7 ms | offset -0.219 ms | p99  1.035 ms | max  1.475 ms | drift  -0.188 ms | stuck  0.43 % | reanchor 28 | cfg 0 | 126.7 ns/smp | click 0.0307
+slow, hand offset -12 dB           lock    61.3 ms | offset -0.987 ms | p99  0.887 ms | max  1.050 ms | drift  -0.795 ms | stuck  0.00 % | reanchor 0 | cfg 0 |  92.6 ns/smp | click 0.0154
+standstill 10 s, vibration -30 dB  lock    61.3 ms | offset -1.634 ms | p99  0.987 ms | max  1.101 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 0 |  50.7 ns/smp | click 0.0233
