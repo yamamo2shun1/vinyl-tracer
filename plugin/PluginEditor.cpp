@@ -1127,7 +1127,7 @@ void VinylTracerEditor::cueClicked (int index)
     const auto mods = juce::ModifierKeys::getCurrentModifiers();
     if (mods.isAltDown())          proc.clearCue (index);
     else if (mods.isCommandDown()) proc.storeCue (index);
-    else                           proc.recallCue (index);
+    else                           proc.triggerCue (index); // through the parameter, so Live's Configure picks it up
     updateCueButtons();
 }
 
