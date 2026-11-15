@@ -16,7 +16,8 @@
 #include <vector>
 
 class VinylTracerProcessor : public juce::AudioProcessor,
-                                 private juce::Timer
+                                 private juce::Timer,
+                                 private juce::AsyncUpdater
 {
 public:
     VinylTracerProcessor();
@@ -59,6 +60,9 @@ public:
     void   recallCue (int index) noexcept;          // play from the cue (done on the audio thread)
     void   clearCue (int index) noexcept;
     double getCue (int index) const noexcept;
+    // Turns the "Cue n" parameter on (as a gesture), which plays from the cue
+    // on the audio thread like a mapped MIDI button. Message thread.
+    void   triggerCue (int index);
     // Play from this position in the sample (seconds), done on the audio thread.
     void   jumpTo (double seconds) noexcept { if (! std::isnan (seconds)) jumpRequest.store (seconds); }
 
@@ -100,6 +104,7 @@ public:
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
     void timerCallback() override;
+    void handleAsyncUpdate() override; // turns the cue parameters off again
 
     // Timecode tables (built once, ~8 MB)
     std::array<std::unique_ptr<vt::LfsrTable>, 2> tables;
@@ -162,6 +167,14 @@ private:
     std::atomic<float>* pGain = nullptr;
     std::atomic<float>* pThru = nullptr;
     std::atomic<float>* pLoop = nullptr;
+
+    // "Cue 1".."Cue 6" parameters for MIDI mapping: turning one on plays from
+    // that cue (like a click on its button). It is turned off again right
+    // away, so both momentary and toggling controller buttons fire on every press.
+    std::array<std::atomic<float>*, kNumCues>   pCue {};
+    std::array<juce::RangedAudioParameter*, kNumCues> cueParams {};
+    std::array<bool, kNumCues> cueWasOn {};
+    std::atomic<unsigned> cueResetMask { 0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VinylTracerProcessor)
 };

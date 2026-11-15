@@ -31,6 +31,12 @@ VinylTracerProcessor::VinylTracerProcessor()
     pGain      = apvts.getRawParameterValue ("gain");
     pThru      = apvts.getRawParameterValue ("thru");
     pLoop      = apvts.getRawParameterValue ("loop");
+    for (int i = 0; i < kNumCues; ++i)
+    {
+        const juce::String id ("cue" + juce::String (i + 1));
+        pCue[size_t (i)]      = apvts.getRawParameterValue (id);
+        cueParams[size_t (i)] = apvts.getParameter (id);
+    }
 
     for (auto& c : cuePoints) c.store (std::nan (""));
 
@@ -41,6 +47,7 @@ VinylTracerProcessor::VinylTracerProcessor()
 VinylTracerProcessor::~VinylTracerProcessor()
 {
     stopTimer();
+    cancelPendingUpdate();
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout VinylTracerProcessor::createLayout()
@@ -58,6 +65,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout VinylTracerProcessor::create
                                                         AudioParameterFloatAttributes().withLabel ("dB")));
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "thru", 1 }, "Timecode Thru", false));
     layout.add (std::make_unique<AudioParameterBool> (ParameterID { "loop", 1 }, "Loop Sample", false));
+    for (int i = 1; i <= kNumCues; ++i)
+        layout.add (std::make_unique<AudioParameterBool> (ParameterID { "cue" + String (i), 1 }, "Cue " + String (i), false));
     return layout;
 }
 
@@ -112,6 +121,26 @@ void VinylTracerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     decoder.setGateDb (pThreshold->load());
     if (nominalRequest.exchange (false))
         decoder.setNominalDb (savedNominalDb.load());
+
+    // Cue parameters (MIDI mapping): play from the cue when one turns on
+    {
+        unsigned reset = 0;
+        for (int i = 0; i < kNumCues; ++i)
+        {
+            const bool on = pCue[size_t (i)]->load() > 0.5f;
+            if (on && ! cueWasOn[size_t (i)])
+            {
+                recallCue (i);
+                reset |= 1u << i;
+            }
+            cueWasOn[size_t (i)] = on;
+        }
+        if (reset != 0)
+        {
+            cueResetMask.fetch_or (reset);
+            triggerAsyncUpdate();
+        }
+    }
 
     const int  mode = int (pMode->load());          // 0 = absolute, 1 = relative
     const bool thru = pThru->load() > 0.5f;
@@ -283,6 +312,24 @@ void VinylTracerProcessor::clearCue (int index) noexcept
 {
     if (index >= 0 && index < kNumCues)
         cuePoints[size_t (index)].store (std::nan (""));
+}
+
+void VinylTracerProcessor::triggerCue (int index)
+{
+    if (index < 0 || index >= kNumCues)
+        return;
+    auto* p = cueParams[size_t (index)];
+    p->beginChangeGesture();
+    p->setValueNotifyingHost (1.f);
+    p->endChangeGesture();
+}
+
+void VinylTracerProcessor::handleAsyncUpdate()
+{
+    const unsigned mask = cueResetMask.exchange (0);
+    for (int i = 0; i < kNumCues; ++i)
+        if ((mask >> i) & 1u)
+            cueParams[size_t (i)]->setValueNotifyingHost (0.f);
 }
 
 double VinylTracerProcessor::getCue (int index) const noexcept
