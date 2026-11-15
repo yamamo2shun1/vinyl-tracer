@@ -5,7 +5,7 @@
 <img width="640" height="360" alt="demo_640_15" src="https://github.com/user-attachments/assets/c5348c04-b6f1-46a1-8ebc-8734fc9b8476" />
 
 ## Screenshot
-<img width="640" alt="image" src="https://github.com/user-attachments/assets/64bdb228-0261-4450-9cb5-51c13218a4b4" />
+<img width="640" alt="v0.6.0" src="https://github.com/user-attachments/assets/4b570038-deba-41ea-b35d-149426c8a2f5" />
 
 ## Description
 Ableton Live などのDAWで、Serato CV02 / CV02.5 のコントロール・ヴァイナルを使い、プラグインに読み込んだサンプルをスクラッチするための VST3 / Audio Unit（AU）プラグインです。
