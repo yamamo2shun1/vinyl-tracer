@@ -54,11 +54,12 @@ public:
     juce::File getSampleFile() const { return sampleFile; }
     std::shared_ptr<const vt::SampleData> getSampleForUI() const { return currentSample; }
 
-    // Cue points: positions in the sample (seconds), NaN when empty.
+    // Cue points: positions in the sample (seconds), NaN when empty. Storing
+    // and clearing also update the settings folder (message thread).
     static constexpr int kNumCues = 6;
-    void   storeCue (int index) noexcept;           // the current playback position
+    void   storeCue (int index);                    // the current playback position
     void   recallCue (int index) noexcept;          // play from the cue (done on the audio thread)
-    void   clearCue (int index) noexcept;
+    void   clearCue (int index);
     double getCue (int index) const noexcept;
     // Turns the "Cue n" parameter on (as a gesture), which plays from the cue
     // on the audio thread like a mapped MIDI button. Message thread.
@@ -105,6 +106,12 @@ private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
     void timerCallback() override;
     void handleAsyncUpdate() override; // turns the cue parameters off again
+
+    // Cue points of every sample, kept per file in the user's settings folder
+    // (shared by all Live sets and plugin instances). Message thread.
+    static juce::File cueLibraryFile();
+    bool loadCuesFromLibrary();  // false when the current sample has no entry
+    void saveCuesToLibrary();
 
     // Timecode tables (built once, ~8 MB)
     std::array<std::unique_ptr<vt::LfsrTable>, 2> tables;

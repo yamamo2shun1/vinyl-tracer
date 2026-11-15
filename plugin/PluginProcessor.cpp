@@ -291,7 +291,7 @@ VinylTracerProcessor::Status VinylTracerProcessor::getStatus() const noexcept
     return s;
 }
 
-void VinylTracerProcessor::storeCue (int index) noexcept
+void VinylTracerProcessor::storeCue (int index)
 {
     if (index < 0 || index >= kNumCues || currentSample == nullptr || currentSample->length == 0)
         return;
@@ -300,6 +300,7 @@ void VinylTracerProcessor::storeCue (int index) noexcept
     double t = stSample.load();
     if (pLoop->load() > 0.5f) t -= len * std::floor (t / len);
     cuePoints[size_t (index)].store (juce::jlimit (0.0, len, t));
+    saveCuesToLibrary();
 }
 
 void VinylTracerProcessor::recallCue (int index) noexcept
@@ -308,10 +309,89 @@ void VinylTracerProcessor::recallCue (int index) noexcept
         jumpTo (cuePoints[size_t (index)].load()); // nothing when empty (NaN)
 }
 
-void VinylTracerProcessor::clearCue (int index) noexcept
+void VinylTracerProcessor::clearCue (int index)
 {
     if (index >= 0 && index < kNumCues)
+    {
         cuePoints[size_t (index)].store (std::nan (""));
+        saveCuesToLibrary();
+    }
+}
+
+juce::File VinylTracerProcessor::cueLibraryFile()
+{
+    auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory);
+   #if JUCE_MAC
+    dir = dir.getChildFile ("Application Support");
+   #endif
+    return dir.getChildFile ("Vinyl Tracer").getChildFile ("cues.xml");
+}
+
+bool VinylTracerProcessor::loadCuesFromLibrary()
+{
+    if (sampleFile == juce::File())
+        return false;
+    const auto xml = juce::XmlDocument::parse (cueLibraryFile());
+    if (xml == nullptr)
+        return false;
+    const auto path = sampleFile.getFullPathName();
+    for (auto* e : xml->getChildWithTagNameIterator ("SAMPLE"))
+    {
+        if (e->getStringAttribute ("path") != path)
+            continue;
+        for (int i = 0; i < kNumCues; ++i)
+        {
+            const juce::String id ("cue" + juce::String (i + 1));
+            cuePoints[size_t (i)].store (e->hasAttribute (id) ? e->getDoubleAttribute (id) : std::nan (""));
+        }
+        return true;
+    }
+    return false;
+}
+
+void VinylTracerProcessor::saveCuesToLibrary()
+{
+    if (sampleFile == juce::File())
+        return;
+    // Read the file again before writing: other instances may have changed it.
+    const auto file = cueLibraryFile();
+    auto xml = juce::XmlDocument::parse (file);
+    if (xml == nullptr || ! xml->hasTagName ("VINYLTRACER_CUES"))
+        xml = std::make_unique<juce::XmlElement> ("VINYLTRACER_CUES");
+
+    const auto path = sampleFile.getFullPathName();
+    juce::XmlElement* entry = nullptr;
+    for (auto* e : xml->getChildWithTagNameIterator ("SAMPLE"))
+        if (e->getStringAttribute ("path") == path) { entry = e; break; }
+
+    bool any = false;
+    for (int i = 0; i < kNumCues; ++i)
+        any |= ! std::isnan (cuePoints[size_t (i)].load());
+
+    if (! any)
+    {
+        if (entry == nullptr)
+            return;
+        xml->removeChildElement (entry, true); // no cue points left
+    }
+    else
+    {
+        if (entry == nullptr)
+        {
+            entry = xml->createNewChildElement ("SAMPLE");
+            entry->setAttribute ("path", path);
+        }
+        for (int i = 0; i < kNumCues; ++i)
+        {
+            const juce::String id ("cue" + juce::String (i + 1));
+            const double t = cuePoints[size_t (i)].load();
+            if (std::isnan (t)) entry->removeAttribute (id);
+            else                entry->setAttribute (id, juce::String (t, 6));
+        }
+    }
+
+    file.getParentDirectory().createDirectory();
+    xml->writeTo (file);
 }
 
 void VinylTracerProcessor::triggerCue (int index)
@@ -391,7 +471,9 @@ bool VinylTracerProcessor::loadSample (const juce::File& file, juce::String& err
     currentSample = sd;
     audioSample.store (sd.get(), std::memory_order_release);
     sampleFile = file;
-    for (int i = 0; i < kNumCues; ++i) clearCue (i); // cue points belong to the previous sample
+    // cue points belong to the previous sample: use the ones stored for this file
+    for (auto& c : cuePoints) c.store (std::nan (""));
+    loadCuesFromLibrary();
     return true;
 }
 
@@ -451,17 +533,27 @@ void VinylTracerProcessor::setStateInformation (const void* data, int sizeInByte
     }
 
     const juce::File f (state.getProperty ("samplePath", juce::String()).toString());
+    bool loaded = false;
     if (f.existsAsFile())
     {
         juce::String err;
-        loadSample (f, err);
+        loaded = loadSample (f, err);
     }
 
-    // after loading the sample (which clears them)
-    for (int i = 0; i < kNumCues; ++i)
+    // Cue points: the ones in the settings folder (loaded with the sample)
+    // win; a set saved before they were kept there brings its own, which are
+    // then added to the settings folder.
+    if (! loaded || ! loadCuesFromLibrary())
     {
-        const juce::Identifier id ("cuePoint" + juce::String (i + 1));
-        cuePoints[size_t (i)].store (state.hasProperty (id) ? double (state.getProperty (id)) : std::nan (""));
+        bool any = false;
+        for (int i = 0; i < kNumCues; ++i)
+        {
+            const juce::Identifier id ("cuePoint" + juce::String (i + 1));
+            cuePoints[size_t (i)].store (state.hasProperty (id) ? double (state.getProperty (id)) : std::nan (""));
+            any |= state.hasProperty (id);
+        }
+        if (loaded && any)
+            saveCuesToLibrary();
     }
 }
 
