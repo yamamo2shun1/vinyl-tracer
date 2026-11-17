@@ -140,19 +140,38 @@ void ScratchPlayer::reset()
     havePos_ = false;
     speedNet_ = 0.0;
     haveCue_ = false;
-    fadeLeft_ = 0;
-    oldShift_ = lastStep_ = 0.0;
+    fadeInLeft_ = 0;
+    for (auto& v : fades_) v = {};
+    lastStep_ = 0.0;
     qualityGain_ = 1.f;
+}
+
+float ScratchPlayer::mainWeight() const noexcept
+{
+    // equal-power fade-in of the current read position
+    return fadeInLeft_ > 0 ? float (std::cos (0.5 * kPi * double (fadeInLeft_) / double (fadeLen_))) : 1.f;
 }
 
 void ScratchPlayer::startFade (double shift) noexcept
 {
     // shift: source frames from the new read position to the one that was
-    // playing. If the previous fade is still mostly the old position, that
-    // one keeps fading out.
-    if (fadeLeft_ * 2 > fadeLen_) oldShift_ += shift;
-    else                          oldShift_ = shift;
-    fadeLeft_ = fadeLen_;
+    // playing. The position that was playing fades out from its present
+    // level; positions already fading out keep fading (they move along with
+    // the read position). Replacing the old one (as before) cut off whatever
+    // was still fading in or out: a jump during a jump's fade was a click.
+    for (auto& v : fades_)
+        v.shift += shift;
+
+    int slot = 0;
+    float weakest = 2.f;
+    for (int k = 0; k < kMaxFadeVoices; ++k)
+    {
+        const auto& v = fades_[k];
+        const float w = v.left > 0 ? v.gain0 * float (std::sin (0.5 * kPi * double (v.left) / double (fadeLen_))) : 0.f;
+        if (w < weakest) { weakest = w; slot = k; } // a free slot, else the quietest
+    }
+    fades_[slot] = { shift, mainWeight(), fadeLen_ };
+    fadeInLeft_ = fadeLen_;
     prevSrc_ -= shift; // no rate spike for the anti-aliasing
 }
 
@@ -311,16 +330,23 @@ void ScratchPlayer::render (const SampleData* sample, const double* vinylPos, in
         float l = 0.f, r = 0.f;
         const double lvl = std::clamp (std::log2 (std::max (rateSmooth_, 1.0)), 0.0, double (maxLevel));
         readAt (src, lvl, l, r);
-        if (fadeLeft_ > 0)
+        if (fadeInLeft_ > 0)
         {
-            // equal-power cross-fade (the two positions are uncorrelated)
-            float lo = 0.f, ro = 0.f;
-            readAt (src + oldShift_, lvl, lo, ro);
-            const float g  = float (fadeLeft_) / float (fadeLen_); // old: 1 -> 0
-            const float wo = float (std::sin (0.5 * kPi * g)), wn = float (std::cos (0.5 * kPi * g));
-            l = wn * l + wo * lo;
-            r = wn * r + wo * ro;
-            --fadeLeft_;
+            // equal-power cross-fade (the positions are uncorrelated)
+            const float wn = mainWeight();
+            l *= wn;
+            r *= wn;
+            for (auto& v : fades_)
+            {
+                if (v.left <= 0) continue;
+                float lo = 0.f, ro = 0.f;
+                readAt (src + v.shift, lvl, lo, ro);
+                const float wo = v.gain0 * float (std::sin (0.5 * kPi * double (v.left) / double (fadeLen_)));
+                l += wo * lo;
+                r += wo * ro;
+                --v.left;
+            }
+            --fadeInLeft_;
         }
 
         // DC blocker: a stopped record holds a constant value -> silence

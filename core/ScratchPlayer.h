@@ -90,8 +90,15 @@ private:
     double prevIn_ = 0.0, lastStep_ = 0.0;  // input position, its last ordinary step
     double lastCue_ = 0.0;
     bool   haveCue_ = false;
-    double oldShift_ = 0.0;                 // old read position - new one (source frames)
-    int    fadeLeft_ = 0, fadeLen_ = 1;
+    // Read positions that are fading out, each relative to the current one
+    // (source frames) and from the level it had when the next jump came, so
+    // jumps that overlap (a cue change during a correction's fade) stay
+    // continuous. The current position fades in over fadeLen_.
+    struct FadeVoice { double shift = 0.0; float gain0 = 0.f; int left = 0; };
+    static constexpr int kMaxFadeVoices = 4;
+    FadeVoice fades_[kMaxFadeVoices] {};
+    int    fadeInLeft_ = 0, fadeLen_ = 1;
+    float  mainWeight() const noexcept;
 
     // Level following the decoder's signal quality
     float  qualityGain_ = 1.f, kQualityDown_ = 1.f, kQualityUp_ = 1.f;

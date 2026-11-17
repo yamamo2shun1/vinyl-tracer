@@ -181,6 +181,7 @@ private:
     std::array<std::atomic<float>*, kNumCues>   pCue {};
     std::array<juce::RangedAudioParameter*, kNumCues> cueParams {};
     std::array<bool, kNumCues> cueWasOn {};
+    std::array<int, kNumCues>  cueHoldSamples {}; // ignore a cue's re-trigger for 100 ms
     std::atomic<unsigned> cueResetMask { 0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (VinylTracerProcessor)
