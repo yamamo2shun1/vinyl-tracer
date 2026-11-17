@@ -805,6 +805,9 @@ VinylTracerEditor::VinylTracerEditor (VinylTracerProcessor& p)
     }
     updateCueButtons();
     setupLabel (cueLabel, "Cue");
+    cueHelpButton.setTooltip ("How to use cue points, and where they are saved");
+    cueHelpButton.onClick = [this] { showCueHelp(); };
+    addAndMakeVisible (cueHelpButton);
 
     setupLabel (timecodeLabel, "Timecode");
     setupLabel (modeLabel, "Mode");
@@ -877,6 +880,14 @@ VinylTracerEditor::~VinylTracerEditor()
 }
 
 //==============================================================================
+void VtLookAndFeel::drawCallOutBoxBackground (juce::CallOutBox&, juce::Graphics& g, const juce::Path& path, juce::Image&)
+{
+    g.setColour (kPanel);
+    g.fillPath (path);
+    g.setColour (kOutline);
+    g.strokePath (path, juce::PathStrokeType (1.5f));
+}
+
 juce::Typeface::Ptr VtLookAndFeel::getTypefaceForFont (const juce::Font& font)
 {
     const auto name = font.getTypefaceName();
@@ -1008,7 +1019,8 @@ void VinylTracerEditor::resized()
     {
         auto cues = toggles.withLeft (cueLeft).withRight (cueRight);
         cueLabel.setBounds (cues.removeFromLeft (32));
-        cues.removeFromLeft (4);
+        cueHelpButton.setBounds (cues.removeFromLeft (24));
+        cues.removeFromLeft (8);
         const int gap = 4, n = VinylTracerProcessor::kNumCues;
         const int w = (cues.getWidth() - gap * (n - 1)) / n;
         for (auto& b : cueButtons)
@@ -1118,6 +1130,87 @@ void VinylTracerEditor::updateDiagnosticsVisibility()
     // the strip adds to the window's height, the other views keep their size
     setSize (kEditorW, kEditorH + (on ? kDiagH + 6 : 0));
     resized(); // also when the size did not change
+}
+
+namespace
+{
+// Contents of the "?" call-out next to the cue buttons: how to use them and
+// where cues.json is, with a button that shows it in Explorer / Finder.
+class CueHelp : public juce::Component
+{
+public:
+    CueHelp()
+    {
+       #if JUCE_MAC
+        const juce::String storeKey = "Cmd", deleteKey = "Option", reveal = "Show in Finder";
+       #else
+        const juce::String storeKey = "Ctrl", deleteKey = "Alt", reveal = "Show in Explorer";
+       #endif
+        const auto file = VinylTracerProcessor::cueLibraryFile();
+
+        text.setMultiLine (true);
+        text.setReadOnly (true);
+        text.setCaretVisible (false);
+        text.setScrollbarsShown (false);
+        text.setFont (juce::Font (juce::FontOptions (12.f)));
+        text.setColour (juce::TextEditor::backgroundColourId, juce::Colours::transparentBlack);
+        text.setColour (juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
+        text.setColour (juce::TextEditor::focusedOutlineColourId, juce::Colours::transparentBlack);
+        text.setColour (juce::TextEditor::textColourId, kText);
+        text.setText ("CUE POINTS\n"
+                      "  Click         : play from the cue\n"
+                      "  " + (storeKey + "+click").paddedRight (' ', 14) + ": store the current position\n"
+                      "  " + (deleteKey + "+click").paddedRight (' ', 14) + ": delete the cue\n"
+                      "  MIDI          : map the parameters Cue 1-6 to\n"
+                      "                  controller buttons in your DAW\n"
+                      "\n"
+                      "SAVED IN\n"
+                      "  " + file.getFullPathName() + "\n"
+                      "  per sample, found by its audio, so the cues stay with\n"
+                      "  a file that is moved or renamed",
+                      false);
+        addAndMakeVisible (text);
+
+        revealButton.setButtonText (reveal);
+        revealButton.onClick = [file]
+        {
+            if (file.existsAsFile())
+                file.revealToUser();
+            else
+            {
+                // nothing stored yet: open the folder
+                const auto dir = file.getParentDirectory();
+                dir.createDirectory();
+                dir.startAsProcess();
+            }
+        };
+        addAndMakeVisible (revealButton);
+
+        const auto font = juce::Font (juce::FontOptions (12.f));
+        int w = 0;
+        for (const auto& line : juce::StringArray::fromLines (text.getText()))
+            w = juce::jmax (w, juce::roundToInt (juce::GlyphArrangement::getStringWidth (font, line)));
+        setSize (juce::jlimit (380, 760, w + 24), 11 * 16 + 48);
+    }
+
+    void resized() override
+    {
+        auto r = getLocalBounds().reduced (6);
+        revealButton.setBounds (r.removeFromBottom (26).removeFromLeft (160));
+        r.removeFromBottom (6);
+        text.setBounds (r);
+    }
+
+private:
+    juce::TextEditor text;
+    juce::TextButton revealButton;
+};
+} // namespace
+
+void VinylTracerEditor::showCueHelp()
+{
+    // inside the editor (a desktop window can end up behind the host's plugin window)
+    juce::CallOutBox::launchAsynchronously (std::make_unique<CueHelp>(), cueHelpButton.getBounds(), this);
 }
 
 void VinylTracerEditor::cueClicked (int index)
