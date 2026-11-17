@@ -80,7 +80,7 @@ In the Finder, choose `Go` → `Go to Folder…` (⇧⌘G) and delete these two 
    - Adjust the input gain on your audio interface so the input level meter stays in the green.
 6. A buffer size of 64–128 samples is recommended in Live. Latency is mostly set by the buffer size.
 
-For details on each parameter and on cue points, see "Ableton Live での使い方" (Using it in Ableton Live) in [README.md](README.md) (currently in Japanese only).
+For details on each parameter and on cue points, see "Usage" in [README.md](README.md#usage).
 
 ## License
 
