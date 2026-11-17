@@ -63,7 +63,6 @@ img { max-width: 100%; height: auto; }
 .shot img, .shot video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 10px; }
 .shot.ui-shot { padding: 0 0 88px; }
 .ui-shot img { aspect-ratio: auto; }
-.shot video { aspect-ratio: 1280 / 778; }
 .shot-caption { font-size: 13px; color: var(--dim); text-align: center; margin: 14px 0 0; }
 
 /* Sections */
