@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 namespace
 {
@@ -324,35 +325,148 @@ void VinylTracerProcessor::clearCue (int index)
     }
 }
 
-juce::File VinylTracerProcessor::cueLibraryFile()
+//==============================================================================
+// Cue library: cues.json in the user's settings folder, one entry per sample.
+// A sample is found by a fingerprint of its decoded audio, so its cue points
+// follow it when the file is moved or renamed (the path and name are kept for
+// reading only). Format (cue n = cues[n - 1], seconds, null = empty):
+//   { "version": 1,
+//     "samples": [ { "name": "Fresh.wav", "path": "C:\\Samples\\Fresh.wav",
+//                    "fingerprint": "3f9a...", "cues": [ 1.234567, null, 10.5, null, null, null ] } ] }
+namespace
+{
+juce::File cueSettingsDir()
 {
     auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory);
    #if JUCE_MAC
     dir = dir.getChildFile ("Application Support");
    #endif
-    return dir.getChildFile ("Vinyl Tracer").getChildFile ("cues.xml");
+    return dir.getChildFile ("Vinyl Tracer");
+}
+
+// 64-bit hash of the decoded audio (format, length and every sample value).
+// Unchanged by moving, renaming or editing the file's tags.
+juce::String audioFingerprint (const juce::AudioBuffer<float>& buf, double sampleRate)
+{
+    uint64_t h = 0xcbf29ce484222325ull;
+    auto mix = [&h] (uint64_t v) { h ^= v; h *= 0x100000001b3ull; h ^= h >> 29; };
+    mix (uint64_t (buf.getNumChannels()));
+    mix (uint64_t (buf.getNumSamples()));
+    mix (uint64_t (juce::roundToInt (sampleRate)));
+    for (int c = 0; c < buf.getNumChannels(); ++c)
+    {
+        const float* x = buf.getReadPointer (c);
+        for (int i = 0; i < buf.getNumSamples(); ++i)
+        {
+            uint32_t bits;
+            std::memcpy (&bits, x + i, sizeof (bits));
+            mix (bits);
+        }
+    }
+    return juce::String::toHexString ((juce::int64) h).paddedLeft ('0', 16);
+}
+
+// Reads the library. The first time, the entries of the old cues.xml (found
+// by path only) are carried over; they get a fingerprint when next loaded.
+juce::Array<juce::var> readCueLibrary (const juce::File& jsonFile)
+{
+    juce::Array<juce::var> entries;
+    if (jsonFile.existsAsFile())
+    {
+        const auto root = juce::JSON::parse (jsonFile);
+        if (const auto* arr = root.getProperty ("samples", juce::var()).getArray())
+            for (const auto& e : *arr)
+                if (e.isObject())
+                    entries.add (e);
+        return entries;
+    }
+    if (const auto xml = juce::XmlDocument::parse (jsonFile.getSiblingFile ("cues.xml")))
+    {
+        for (auto* e : xml->getChildWithTagNameIterator ("SAMPLE"))
+        {
+            auto* o = new juce::DynamicObject();
+            const juce::File f (e->getStringAttribute ("path"));
+            o->setProperty ("name", f.getFileName());
+            o->setProperty ("path", f.getFullPathName());
+            juce::Array<juce::var> cues;
+            for (int i = 1; i <= VinylTracerProcessor::kNumCues; ++i)
+            {
+                const juce::String id ("cue" + juce::String (i));
+                cues.add (e->hasAttribute (id) ? juce::var (e->getDoubleAttribute (id)) : juce::var());
+            }
+            o->setProperty ("cues", cues);
+            entries.add (juce::var (o));
+        }
+    }
+    return entries;
+}
+
+void writeCueLibrary (const juce::File& jsonFile, const juce::Array<juce::var>& entries)
+{
+    auto* root = new juce::DynamicObject();
+    root->setProperty ("version", 1);
+    root->setProperty ("samples", entries);
+    jsonFile.getParentDirectory().createDirectory();
+    jsonFile.replaceWithText (juce::JSON::toString (juce::var (root),
+                                                    juce::JSON::FormatOptions().withMaxDecimalPlaces (6)) + "\n");
+}
+
+// Entry for the sample: by fingerprint, else (an entry carried over from
+// cues.xml, without one) by path. -1 if none.
+int findCueEntry (const juce::Array<juce::var>& entries, const juce::String& fingerprint, const juce::String& path)
+{
+    for (int k = 0; k < entries.size(); ++k)
+        if (fingerprint.isNotEmpty() && entries[k].getProperty ("fingerprint", juce::var()).toString() == fingerprint)
+            return k;
+    for (int k = 0; k < entries.size(); ++k)
+        if (entries[k].getProperty ("fingerprint", juce::var()).toString().isEmpty()
+            && entries[k].getProperty ("path", juce::var()).toString() == path)
+            return k;
+    return -1;
+}
+} // namespace
+
+juce::File VinylTracerProcessor::cueLibraryFile()
+{
+    return cueSettingsDir().getChildFile ("cues.json");
 }
 
 bool VinylTracerProcessor::loadCuesFromLibrary()
 {
     if (sampleFile == juce::File())
         return false;
-    const auto xml = juce::XmlDocument::parse (cueLibraryFile());
-    if (xml == nullptr)
-        return false;
+    const auto file = cueLibraryFile();
+    auto entries = readCueLibrary (file);
     const auto path = sampleFile.getFullPathName();
-    for (auto* e : xml->getChildWithTagNameIterator ("SAMPLE"))
+    const int k = findCueEntry (entries, sampleFingerprint, path);
+    if (k < 0)
+        return false;
+
+    const double len = currentSample != nullptr ? double (currentSample->length) / currentSample->sampleRate : 0.0;
+    const auto* cues = entries[k].getProperty ("cues", juce::var()).getArray();
+    for (int i = 0; i < kNumCues; ++i)
     {
-        if (e->getStringAttribute ("path") != path)
-            continue;
-        for (int i = 0; i < kNumCues; ++i)
-        {
-            const juce::String id ("cue" + juce::String (i + 1));
-            cuePoints[size_t (i)].store (e->hasAttribute (id) ? e->getDoubleAttribute (id) : std::nan (""));
-        }
-        return true;
+        const juce::var v = (cues != nullptr && i < cues->size()) ? (*cues)[i] : juce::var();
+        const bool valid = (v.isDouble() || v.isInt() || v.isInt64()) && len > 0.0;
+        cuePoints[size_t (i)].store (valid ? juce::jlimit (0.0, len, double (v)) : std::nan (""));
     }
-    return false;
+
+    // Keep the entry's fingerprint, path and name up to date (moved or
+    // renamed file, an entry carried over from cues.xml, a new library).
+    auto& e = entries.getReference (k);
+    if (e.getProperty ("fingerprint", juce::var()).toString() != sampleFingerprint
+        || e.getProperty ("path", juce::var()).toString() != path
+        || ! file.existsAsFile())
+    {
+        if (auto* o = e.getDynamicObject())
+        {
+            o->setProperty ("name", sampleFile.getFileName());
+            o->setProperty ("path", path);
+            o->setProperty ("fingerprint", sampleFingerprint);
+        }
+        writeCueLibrary (file, entries);
+    }
+    return true;
 }
 
 void VinylTracerProcessor::saveCuesToLibrary()
@@ -361,43 +475,36 @@ void VinylTracerProcessor::saveCuesToLibrary()
         return;
     // Read the file again before writing: other instances may have changed it.
     const auto file = cueLibraryFile();
-    auto xml = juce::XmlDocument::parse (file);
-    if (xml == nullptr || ! xml->hasTagName ("VINYLTRACER_CUES"))
-        xml = std::make_unique<juce::XmlElement> ("VINYLTRACER_CUES");
-
+    auto entries = readCueLibrary (file);
     const auto path = sampleFile.getFullPathName();
-    juce::XmlElement* entry = nullptr;
-    for (auto* e : xml->getChildWithTagNameIterator ("SAMPLE"))
-        if (e->getStringAttribute ("path") == path) { entry = e; break; }
+    const int k = findCueEntry (entries, sampleFingerprint, path);
 
     bool any = false;
+    juce::Array<juce::var> cues;
     for (int i = 0; i < kNumCues; ++i)
-        any |= ! std::isnan (cuePoints[size_t (i)].load());
+    {
+        const double t = cuePoints[size_t (i)].load();
+        any |= ! std::isnan (t);
+        cues.add (std::isnan (t) ? juce::var() : juce::var (t));
+    }
 
     if (! any)
     {
-        if (entry == nullptr)
+        if (k < 0)
             return;
-        xml->removeChildElement (entry, true); // no cue points left
+        entries.remove (k); // no cue points left
     }
     else
     {
-        if (entry == nullptr)
-        {
-            entry = xml->createNewChildElement ("SAMPLE");
-            entry->setAttribute ("path", path);
-        }
-        for (int i = 0; i < kNumCues; ++i)
-        {
-            const juce::String id ("cue" + juce::String (i + 1));
-            const double t = cuePoints[size_t (i)].load();
-            if (std::isnan (t)) entry->removeAttribute (id);
-            else                entry->setAttribute (id, juce::String (t, 6));
-        }
+        auto* o = new juce::DynamicObject();
+        o->setProperty ("name", sampleFile.getFileName());
+        o->setProperty ("path", path);
+        o->setProperty ("fingerprint", sampleFingerprint);
+        o->setProperty ("cues", cues);
+        if (k < 0) entries.add (juce::var (o));
+        else       entries.set (k, juce::var (o));
     }
-
-    file.getParentDirectory().createDirectory();
-    xml->writeTo (file);
+    writeCueLibrary (file, entries);
 }
 
 void VinylTracerProcessor::triggerCue (int index)
@@ -477,6 +584,7 @@ bool VinylTracerProcessor::loadSample (const juce::File& file, juce::String& err
     currentSample = sd;
     audioSample.store (sd.get(), std::memory_order_release);
     sampleFile = file;
+    sampleFingerprint = audioFingerprint (buf, reader->sampleRate);
     // cue points belong to the previous sample: use the ones stored for this file
     for (auto& c : cuePoints) c.store (std::nan (""));
     loadCuesFromLibrary();

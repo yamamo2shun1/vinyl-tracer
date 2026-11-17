@@ -115,12 +115,14 @@ The Cue buttons 1–6 store up to 6 positions in the sample.
 - Click: plays from that cue (nothing happens on an empty button).
 - Alt+click (Option+click on macOS): deletes the cue.
 
-**Where they are saved**: cues are saved per sample file in the user's settings folder. Loading the same file brings its cues back, in other projects and on other tracks too. They are not carried over if the file is moved or renamed.
+**Where they are saved**: cues are saved per sample in the user's settings folder. Loading the same sample brings its cues back, in other projects and on other tracks too. Samples are recognised by their audio content, so the cues stay with a file that is moved or renamed (but not with one whose audio is edited or re-encoded).
 
 | OS | Location |
 |---|---|
-| Windows | `%APPDATA%\Vinyl Tracer\cues.xml` |
-| macOS | `~/Library/Application Support/Vinyl Tracer/cues.xml` |
+| Windows | `%APPDATA%\Vinyl Tracer\cues.json` |
+| macOS | `~/Library/Application Support/Vinyl Tracer/cues.json` |
+
+`cues.json` is plain JSON and can be edited by hand: each entry has `cues`, the positions of Cue 1–6 in seconds (`null` = empty). `name` and `path` show where the file was last loaded from; `fingerprint` identifies the audio and should be left as it is. Cues saved by version 0.6.x (`cues.xml`) are carried over automatically.
 
 **MIDI control**: playing from a cue also works from the buttons of a MIDI controller. Map the plugin parameters `Cue 1`–`Cue 6` to buttons with your DAW's MIDI mapping (MIDI learn). Each press plays from that cue. Both momentary buttons and toggle buttons work.
 

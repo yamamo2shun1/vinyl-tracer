@@ -64,6 +64,8 @@ public:
     // Turns the "Cue n" parameter on (as a gesture), which plays from the cue
     // on the audio thread like a mapped MIDI button. Message thread.
     void   triggerCue (int index);
+    // cues.json in the user's settings folder (may not exist yet)
+    static juce::File cueLibraryFile();
     // Play from this position in the sample (seconds), done on the audio thread.
     void   jumpTo (double seconds) noexcept { if (! std::isnan (seconds)) jumpRequest.store (seconds); }
 
@@ -107,9 +109,9 @@ private:
     void timerCallback() override;
     void handleAsyncUpdate() override; // turns the cue parameters off again
 
-    // Cue points of every sample, kept per file in the user's settings folder
-    // (shared by all Live sets and plugin instances). Message thread.
-    static juce::File cueLibraryFile();
+    // Cue points of every sample, kept in the user's settings folder (shared
+    // by all Live sets and plugin instances) and found by a fingerprint of the
+    // audio, so they follow a moved or renamed file. Message thread.
     bool loadCuesFromLibrary();  // false when the current sample has no entry
     void saveCuesToLibrary();
 
@@ -143,6 +145,7 @@ private:
     struct Retired { std::shared_ptr<const vt::SampleData> s; juce::uint32 time; };
     std::vector<Retired> retired;
     juce::File sampleFile;
+    juce::String sampleFingerprint; // hash of the decoded audio (finds its cue points)
     juce::AudioFormatManager formatManager;
 
     // Status published by the audio thread
