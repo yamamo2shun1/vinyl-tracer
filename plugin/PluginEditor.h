@@ -107,6 +107,8 @@ class VtLookAndFeel : public juce::LookAndFeel_V4
 public:
     VtLookAndFeel();
     juce::Typeface::Ptr getTypefaceForFont (const juce::Font&) override;
+    // opaque panel colour (the default is translucent; the waveform showed through)
+    void drawCallOutBoxBackground (juce::CallOutBox&, juce::Graphics&, const juce::Path&, juce::Image&) override;
 
 private:
     juce::Typeface::Ptr regular, bold;
@@ -147,6 +149,8 @@ private:
     juce::ToggleButton diagButton { "Diagnostics" };
     std::array<juce::TextButton, VinylTracerProcessor::kNumCues> cueButtons;
     juce::Label      cueLabel;
+    juce::TextButton cueHelpButton { "?" }; // how to use cue points, where they are saved
+    void showCueHelp();
     std::array<double, VinylTracerProcessor::kNumCues> shownCues {};
     juce::TooltipWindow tooltips { this };
     juce::Label      statusLabel, levelLabel;
