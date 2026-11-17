@@ -128,11 +128,17 @@ void VinylTracerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         for (int i = 0; i < kNumCues; ++i)
         {
             const bool on = pCue[size_t (i)]->load() > 0.5f;
-            if (on && ! cueWasOn[size_t (i)])
+            auto& hold = cueHoldSamples[size_t (i)];
+            if (on && ! cueWasOn[size_t (i)] && hold <= 0)
             {
                 recallCue (i);
                 reset |= 1u << i;
+                // The host can pass a click's "on" back to the processor after
+                // it was turned off again here, which would play the cue a
+                // second time a few ms later.
+                hold = int (0.1 * getSampleRate());
             }
+            hold = juce::jmax (0, hold - numSamples);
             cueWasOn[size_t (i)] = on;
         }
         if (reset != 0)
