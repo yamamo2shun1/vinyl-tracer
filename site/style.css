@@ -64,6 +64,10 @@ img { max-width: 100%; height: auto; }
 .shot.ui-shot { padding: 0 0 88px; }
 .ui-shot img { aspect-ratio: auto; }
 .shot-caption { font-size: 13px; color: var(--dim); text-align: center; margin: 14px 0 0; }
+.video-link { display: block; border-radius: 10px; }
+.video-link video { transition: opacity .2s; }
+.video-link:hover video { opacity: .85; }
+.video-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 
 /* Sections */
 .section { padding: 88px 0; }
