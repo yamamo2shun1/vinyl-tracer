@@ -95,13 +95,22 @@ private:
     void processSample (float xl, float xr) noexcept;
     void onCrossing (int primary, float primaryValue) noexcept;
     void fastRead (float amplitude, int dir, double rel, double absSpeed) noexcept;
+    void anchor (double offsetNew, int valid) noexcept;
     void correct (double offsetNew, double diff) noexcept;
+
+    // Traktor MK2 (offset encoding)
+    void mk2FrontEnd (double& l0, double& r0) noexcept;
+    void mk2Acquire() noexcept;
+    void mk2Pulses() noexcept;
+    void mk2Candidate() noexcept;
+    void onTransition (int sign, double u, double rel, double absSpeed) noexcept;
     void updateLoopGains (double absSpeed) noexcept;
 
     static int hypIndex (int primary, int polarity, int dir) noexcept { return primary * 4 + polarity * 2 + dir; }
 
     const LfsrTable* table_ = nullptr;
     double sr_ = 48000.0;
+    double unit_ = 1.0; // carrier cycles per ms of record (1 for Serato)
 
     // DC removal
     double dcL_ = 0.0, dcR_ = 0.0, kDc_ = 0.0, kDcSlow_ = 0.0;
@@ -177,6 +186,46 @@ private:
     double   fastDiff_ = 0.0;
     bool     fastSynced_ = false;
     bool     fastLost_ = false; // the input was not a carrier since the last match (search wide)
+
+    // Traktor MK2: the bits are a common-mode offset (L = R) of the carrier,
+    // as large as the carrier itself. L - R is a clean carrier; L + R carries
+    // the other quadrature component plus the offset. The offset is estimated
+    // by a tracking filter on what the predicted carrier does not explain, and
+    // taken off before the phase tracker. Its level changes at the bit
+    // boundaries; after undoing the playback RIAA curve each change is a pulse.
+    bool   mk2_ = false;
+    double mkC_ = 0.0, mkD_ = 0.0;            // offset estimate (level, slope per sample)
+    bool   mkZcPos_ = false;                  // zero crossings of S -> carrier frequency
+    int    mkZcCount_ = 0;
+    double mkZcFreq_ = 0.0;
+    int    mkZcSteady_ = 0;                   // consecutive crossings within 10 % of the mean
+    int    mkHalfCount_ = 0, mkHalf1_ = 0, mkHalf2_ = 0; // last two half cycles of S (samples)
+    double mkHalfFreq_ = 0.0;                 // ... their frequency, 0 when they disagree
+    int    mkQuick_ = 0;                      // samples a quick start has been due
+    double mkSPow_ = 0.0;                     // power of S, 120 Hz high-pass (3 ms)
+    double mkHpB0_ = 1.0, mkHpB1_ = 0.0, mkHpA1_ = 0.0, mkHpA2_ = 0.0; // 120 Hz high-pass of S
+    double mkHx1_ = 0.0, mkHx2_ = 0.0, mkHy1_ = 0.0, mkHy2_ = 0.0;
+    double mkLx1_ = 0.0, mkLx2_ = 0.0, mkLy1_ = 0.0, mkLy2_ = 0.0; // high-pass of S for the tracker
+    double mkS_ = 0.0, mkM_ = 0.0;            // S and M of the current sample
+    double mkQ_ = 0.0, kMkQ_ = 0.0, mkLPrev_ = 0.0; // direction: M x change of S
+    int    mkStuck_ = 0;                      // samples the tracker stayed far below the carrier
+    bool   mkBehind_ = false;                 // ... it is now
+    double mkGoodV_ = 0.0, mkGoodX_ = 0.0;    // last speed that matched the zero crossings, and position ...
+    int    mkGoodAge_ = 1 << 30;              // ... this many samples ago
+    double mkPol_ = 1.0, kMkPol_ = 0.0;       // carrier polarity (theta vs theta + pi)
+    double mkShB0_ = 1.0, mkShB1_ = 0.0, mkShA1_ = 0.0; // RIAA 3180 / 318 us section
+    double mkShX_ = 0.0, mkShY_ = 0.0, mkZPrev_ = 0.0, mkHpY_ = 0.0;
+    double mkV_ = 0.0;                        // pulse signal
+    double mkPulseLevel_ = 1.0;               // pulse peak / (envelope x speed), learned
+    bool   mkCandOn_ = false;                 // pulse candidate (largest |v| so far)
+    int    mkCandSign_ = 0;
+    double mkCandV_ = 0.0, mkCandU_ = 0.0, mkCandRel_ = 0.0;
+    double mkCandSpeed_ = 0.0, mkCandEnv_ = 0.0;
+    bool   mkLastOn_ = false;                 // previous transition of the current run
+    int    mkLastSign_ = 0;
+    double mkLastU_ = 0.0;
+    bool   mkReversed_ = false;               // the tracker reversed since the last transition
+    int    mkVSign_ = 0;
 
     DecoderStatus status_;
 };

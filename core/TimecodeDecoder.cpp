@@ -5,7 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
-#ifdef VT_DEBUG
+#if defined (VT_DEBUG) || defined (VT_DEBUG_MK)
 #include <cstdio>
 #endif
 
@@ -20,6 +20,7 @@ constexpr int    kReanchorBits = 3;     // consecutive disagreeing bits before a
 constexpr double kReanchorTol  = 0.25;  // cycles; tracker slips come in steps of 0.5
 constexpr double kJumpCycles   = 4.0;   // larger corrections jump, smaller ones slew
 constexpr double kSlewPerSec   = 25.0;  // cycles/s for small corrections (2.5 % pitch)
+// (these three: cycles of a 1000 Hz carrier, scaled by unit_ for others)
 constexpr double kAnchorMinSpeed = 0.6; // anchor / verify only in the flat RIAA region
 constexpr double kAnchorMaxSpeed = 2.0;
 constexpr int    kSwitchAfterBits = 4000; // ~4 s of failing bits before re-selecting
@@ -49,6 +50,34 @@ constexpr int    kFastWideRange  = 2048;  // ... after the input was not a carri
 constexpr double kFastMaxSpeed   = 6.0;   // bits are read up to this speed (whole cycles only above 2x)
 constexpr double kFastMinSpeed   = 0.3;   // the bits must be read in one run in one direction above this
 constexpr int    kFastConfirm    = 3;     // matches giving the same correction before it is applied
+
+// Traktor MK2 (offset encoding)
+constexpr double kPi             = 3.141592653589793;
+constexpr double kMkCutRatio     = 0.45;   // offset filter bandwidth relative to the carrier frequency (0.35-0.5 work; wider loses the carrier at start-up)
+constexpr double kMkCutMinHz     = 20.0;
+constexpr double kMkLHpRatio     = 0.15;   // high-pass of S for the tracker, relative to the carrier (~12 deg lead) ...
+constexpr double kMkLHpMinHz     = 5.0;
+constexpr double kMkLHpMaxHz     = 400.0;
+constexpr double kMkRoughScale   = 2.0;    // quality thresholds x this: the residual has a higher floor (offset left in M)
+constexpr double kMkPolSeconds   = 0.001;  // carrier polarity smoothing
+constexpr double kRiaaT1 = 3180e-6, kRiaaT2 = 318e-6, kRiaaT3 = 75e-6; // playback curve time constants
+constexpr double kMkHpPerSpeedHz = 8.0;    // pulse high-pass (removes the slow drift of the offset)
+constexpr double kMkHpMinHz      = 2.0;
+constexpr double kMkPulseThr     = 0.6;    // pulse threshold relative to the learned pulse level (ringing lobes reach ~0.45)
+constexpr double kMkPulseLearn   = 0.01;
+constexpr double kMkPulseInit    = 15.0;   // measured (14.7-18.7 from 2x to 0.4x)
+constexpr double kMkPulseSpan    = 1.0;    // cycles: a pulse peak is final this far behind
+constexpr double kMkMinBitSpeed  = 0.1;    // bits are read above this
+constexpr double kMkRevSpeed     = 0.02;   // tracker direction changes counted above this
+constexpr double kMkGapTol       = 0.3;    // bits: gaps between transitions must be this close to whole bits
+constexpr int    kMkMaxRunBits   = 40;     // longer gaps: a transition was missed
+constexpr double kMkAcqMinSpeed  = 0.1;    // start-up help for carriers above this ...
+constexpr double kMkAcqSeconds   = 0.01;   // ... when the tracker stayed this long far below it
+constexpr double kMkQuickMinSpeed = 0.15;  // quick start for carriers above this ...
+constexpr double kMkQuickSeconds = 0.001;  // ... after the tracker stayed this long far below them
+constexpr double kMkRestoreSeconds = 0.02; // after a click: restore the speed the tracker had this recently
+constexpr double kMkAnchorMinSpeed = 0.3;  // the offset is read cleanly well below the Serato range
+constexpr double kMkAnchorMaxSpeed = 2.5;
 
 inline int popcount64 (uint64_t v) noexcept
 {
@@ -95,6 +124,25 @@ void TimecodeDecoder::prepare (double sampleRate)
     kCentre_ = onePole (sr_, 0.005);
     kPeak_ = float (std::exp (-1.0 / (0.3 * sr_)));
     coast_ = std::exp (-1.0 / (0.010 * sr_));
+    kMkPol_ = onePole (sr_, kMkPolSeconds);
+    kMkQ_   = onePole (sr_, 0.001);
+    {
+        // 2nd-order Butterworth high-pass, 120 Hz (zero crossings of S)
+        const double w0 = kTwoPi * 120.0 / sr_, cw = std::cos (w0), al = std::sin (w0) / std::sqrt (2.0);
+        const double a0 = 1.0 + al;
+        mkHpB0_ = (1.0 + cw) / 2.0 / a0;
+        mkHpB1_ = -(1.0 + cw) / a0;
+        mkHpA1_ = -2.0 * cw / a0;
+        mkHpA2_ = (1.0 - al) / a0;
+    }
+    {
+        // (1 + s T1) / (1 + s T2), bilinear
+        const double K  = 2.0 * sr_;
+        const double a0 = 1.0 + K * kRiaaT2;
+        mkShB0_ = (1.0 + K * kRiaaT1) / a0;
+        mkShB1_ = (1.0 - K * kRiaaT1) / a0;
+        mkShA1_ = (1.0 - K * kRiaaT2) / a0;
+    }
     lastLoopSpeed_ = -1.0;
     updateLoopGains (0.0);
     reset();
@@ -114,6 +162,12 @@ void TimecodeDecoder::setTable (const LfsrTable* table)
     offset_ = offsetTarget_ = 0.0;
     fastN_ = fastCount_ = fastAgree_ = 0;
     fastSynced_ = fastLost_ = false;
+    mk2_ = table_ != nullptr && table_->def().encoding == TimecodeDef::Encoding::Offset;
+    // The correction thresholds below are in cycles of a 1000 Hz carrier
+    // (= ms of record); other carriers keep the same times.
+    unit_ = table_ != nullptr ? table_->def().resolution / 1000.0 : 1.0;
+    mkCandOn_ = mkLastOn_ = mkReversed_ = false;
+    mkVSign_ = 0;
 }
 
 void TimecodeDecoder::reset()
@@ -130,6 +184,23 @@ void TimecodeDecoder::reset()
     gateOpen_ = false;
     posL_ = posR_ = false;
     for (auto& r : refLevel_) r[0] = r[1] = 1.f;
+    mkC_ = mkD_ = 0.0;
+    mkZcPos_ = false;
+    mkZcCount_ = 0;
+    mkZcFreq_ = 0.0;
+    mkSPow_ = 0.0;
+    mkHx1_ = mkHx2_ = mkHy1_ = mkHy2_ = mkLx1_ = mkLx2_ = mkLy1_ = mkLy2_ = 0.0;
+    mkQ_ = mkLPrev_ = 0.0;
+    mkStuck_ = 0;
+    mkBehind_ = false;
+    mkGoodV_ = mkGoodX_ = 0.0;
+    mkGoodAge_ = 1 << 30;
+    mkZcSteady_ = 0;
+    mkHalfCount_ = mkHalf1_ = mkHalf2_ = mkQuick_ = 0;
+    mkHalfFreq_ = 0.0;
+    mkPol_ = 1.0;
+    mkShX_ = mkShY_ = mkZPrev_ = mkHpY_ = mkV_ = 0.0;
+    mkPulseLevel_ = kMkPulseInit;
     setTable (table_);
     status_ = DecoderStatus {};
 }
@@ -195,7 +266,14 @@ void TimecodeDecoder::process (const float* left, const float* right, int numSam
         // position shakes back and forth within a millisecond. The true motion
         // is unknown there; the player turns the level down instead.
         if (quality != nullptr)
-            quality[i] = float (1.0 - std::clamp ((lockErr_ - kRoughLow) / (kRoughHigh - kRoughLow), 0.0, 1.0));
+        {
+            // MK2: the offset left in M raises the residual while a hand moves
+            // the record (0.05-0.15 with the tracking right to < 1 ms); at the
+            // Serato thresholds the level went down at most reversals and
+            // pull-backs for up to ~30 ms (heard as drop-outs).
+            const double sc = mk2_ ? kMkRoughScale : 1.0;
+            quality[i] = float (1.0 - std::clamp ((lockErr_ - kRoughLow * sc) / ((kRoughHigh - kRoughLow) * sc), 0.0, 1.0));
+        }
         // diagnostics
         if (lockError != nullptr)
             lockError[i] = float (lockErr_);
@@ -228,8 +306,10 @@ void TimecodeDecoder::processSample (float xl, float xr) noexcept
     const double kdc = (gateOpen_ && std::abs (speedNow_) > kCalMinSpeed) ? kDc_ : kDcSlow_;
     dcL_ += kdc * (double (xl) - dcL_);
     dcR_ += kdc * (double (xr) - dcR_);
-    const double l0 = double (xl) - dcL_;
-    const double r0 = double (xr) - dcR_;
+    double l0 = double (xl) - dcL_;
+    double r0 = double (xr) - dcR_;
+    if (mk2_)
+        mk2FrontEnd (l0, r0); // -> L - R and the offset-free quadrature component
 
     const double rawMag = std::sqrt (l0 * l0 + r0 * r0);
     peak_ = std::max (peak_ * kPeak_, float (rawMag));
@@ -283,6 +363,10 @@ void TimecodeDecoder::processSample (float xl, float xr) noexcept
     status_.scopeL = float (l / std::max (refAmp_, 1e-6));
     status_.scopeR = float (r / std::max (refAmp_, 1e-6));
 
+
+    // MK2: start the tracker on a record that is already turning (see mk2Acquire)
+    if (mk2_)
+        mk2Acquire();
 
     // 4. Phase tracker on the doubled angle
     const double Xp = X_ + V_ + 0.5 * A_;
@@ -408,7 +492,7 @@ void TimecodeDecoder::processSample (float xl, float xr) noexcept
 
     if (offset_ != offsetTarget_)
     {
-        const double step = kSlewPerSec / sr_;
+        const double step = kSlewPerSec * unit_ / sr_;
         const double d    = offsetTarget_ - offset_;
         offset_ = (std::abs (d) <= step) ? offsetTarget_ : offset_ + (d > 0 ? step : -step);
     }
@@ -418,7 +502,7 @@ void TimecodeDecoder::processSample (float xl, float xr) noexcept
     // over and over.
     if (relCorr_ != relCorrTarget_)
     {
-        const double step = kSlewPerSec / sr_;
+        const double step = kSlewPerSec * unit_ / sr_;
         const double d    = relCorrTarget_ - relCorr_;
         relCorr_ = (std::abs (d) <= step) ? relCorrTarget_ : relCorr_ + (d > 0 ? step : -step);
     }
@@ -433,7 +517,9 @@ void TimecodeDecoder::processSample (float xl, float xr) noexcept
         refAmp_ += kRef_ * 10.0 * (rawMag - refAmp_);
 
     // 5. Zero crossings of the calibrated channels -> bit reads
-    if (gateOpen_ && table_ != nullptr && std::abs (speedNow) > kMinBitSpeed && env_ > 0.0)
+    if (mk2_)
+        mk2Pulses();
+    else if (gateOpen_ && table_ != nullptr && std::abs (speedNow) > kMinBitSpeed && env_ > 0.0)
     {
         const double h = 0.1 * env_;
         if (posL_ ? (l < -h) : (l > h))
@@ -552,7 +638,6 @@ void TimecodeDecoder::onCrossing (int primary, float primaryValue) noexcept
 
         const double rel       = double (dirSign_) * X_ * 0.5 + relShift_;
         const double offsetNew = double (n) - rel;
-        const double diff      = offsetNew - offsetTarget_;
         const double absSpeed  = std::abs (speedNow_);
 
         // Only use readings in the speed range where the pickup + RIAA phase
@@ -562,38 +647,49 @@ void TimecodeDecoder::onCrossing (int primary, float primaryValue) noexcept
         if (absSpeed < kAnchorMinSpeed || absSpeed > kAnchorMaxSpeed)
             continue;
 
-        if (! anchored_)
+        anchor (offsetNew, h.valid);
+    }
+}
+
+// A verified reading of the absolute position (offsetNew = absolute - relative).
+void TimecodeDecoder::anchor (double offsetNew, int valid) noexcept
+{
+    (void) valid;
+    const double diff = offsetNew - offsetTarget_;
+    if (! anchored_)
+    {
+        offset_ = offsetTarget_ = offsetNew;
+        anchored_ = true;
+        mismatch_ = 0;
+        stale_    = false;
+    }
+    else if (stale_ && std::abs (diff) > kReanchorTol * unit_)
+    {
+        // first lock after the needle was lifted: jump straight away
+#ifdef VT_DEBUG_MK
+        std::fprintf (stderr, "stale-jump diff=%+.3f\n", diff);
+#endif
+        offset_ = offsetTarget_ = offsetNew;
+        mismatch_ = 0;
+        stale_    = false;
+        ++reanchors_;
+    }
+    else
+    {
+        stale_ = false;
+        if (std::abs (diff) > kReanchorTol * unit_)
         {
-            offset_ = offsetTarget_ = offsetNew;
-            anchored_ = true;
-            mismatch_ = 0;
-            stale_    = false;
-        }
-        else if (stale_ && std::abs (diff) > kReanchorTol)
-        {
-            // first lock after the needle was lifted: jump straight away
-            offset_ = offsetTarget_ = offsetNew;
-            mismatch_ = 0;
-            stale_    = false;
-            ++reanchors_;
+            if (++mismatch_ >= kReanchorBits)
+            {
+#if defined (VT_DEBUG) || defined (VT_DEBUG_MK)
+                std::fprintf (stderr, "reanchor diff=%+.3f V=%+.4f valid=%d\n", diff, V_, valid);
+#endif
+                correct (offsetNew, diff);
+            }
         }
         else
         {
-            stale_ = false;
-            if (std::abs (diff) > kReanchorTol)
-            {
-                if (++mismatch_ >= kReanchorBits)
-                {
-#ifdef VT_DEBUG
-                    std::fprintf (stderr, "reanchor diff=%+.3f V=%+.4f dir=%d valid=%d\n", diff, V_, dir, h.valid);
-#endif
-                    correct (offsetNew, diff);
-                }
-            }
-            else
-            {
-                mismatch_ = 0;
-            }
+            mismatch_ = 0;
         }
     }
 }
@@ -609,10 +705,10 @@ void TimecodeDecoder::correct (double offsetNew, double diff) noexcept
     const double rev  = table_->def().resolution * kSecondsPerRev;
     const double slip = diff - rev * std::round (diff / rev);
     relCorrTarget_ += slip;
-    if (std::abs (slip) > kJumpCycles)
+    if (std::abs (slip) > kJumpCycles * unit_)
         relCorr_ = relCorrTarget_; // large: jump (the player cross-fades it)
     offsetTarget_ = offsetNew;
-    if (std::abs (diff) > kJumpCycles)
+    if (std::abs (diff) > kJumpCycles * unit_)
         offset_ = offsetNew; // large: jump the absolute position
     mismatch_ = 0;
     fastAgree_ = 0;
@@ -745,6 +841,399 @@ void TimecodeDecoder::fastRead (float amplitude, int dir, double rel, double abs
         correct (offsetNew, diff);
         fastSynced_ = true;
         fastLost_ = false;
+    }
+}
+
+//==============================================================================
+// Traktor MK2
+//
+// The carrier is a stereo quadrature pair like Serato's, but each bit is a
+// common-mode offset (the same on L and R) about as large as the carrier,
+// changing level at the bit boundaries every 2.5 cycles. The L / R path is a
+// circle whose centre runs up and down the L = R diagonal.
+//  * S = (L - R) / 2 has no offset: one clean component of the carrier.
+//  * M = (L + R) / 2 is the other component (in quadrature, give or take the
+//    L / R calibration) plus the offset. The offset is estimated by a
+//    tracking filter on M minus the carrier the tracker predicts for this
+//    sample, and M minus that estimate goes to the tracker as the second
+//    component. The filter's bandwidth follows the carrier frequency, so the
+//    separation is the same at any speed (the offset's spectrum ends at
+//    ~0.4 x the carrier).
+//  * The offset estimate, with the playback RIAA curve undone, is a pulse at
+//    every bit boundary (positive for 0 -> 1 in time). The distance between
+//    pulses, measured with the tracked position, gives the number of bits.
+void TimecodeDecoder::mk2FrontEnd (double& l0, double& r0) noexcept
+{
+    const double s = 0.5 * (l0 - r0);
+    const double m = 0.5 * (l0 + r0);
+    mkS_ = s;
+    mkM_ = m;
+    // A fixed 120 Hz high-pass of S for its zero crossings (they only matter
+    // above 0.15x = 375 Hz) and the carrier amplitude. A hand holding and
+    // pushing the record moves the stylus up and down, and L - R then carries
+    // a component below ~150 Hz up to 2-3 x the carrier (tear scratches): it
+    // shifted the zero crossings, the start-up helps did not see the carrier
+    // and the tracker stayed at rest for tens of ms (drop-outs). (The
+    // amplitude is not taken from the calibrated pair: that contains the
+    // predicted carrier itself and fed back on it.)
+    const double sz = mkHpB0_ * s + mkHpB1_ * mkHx1_ + mkHpB0_ * mkHx2_ - mkHpA1_ * mkHy1_ - mkHpA2_ * mkHy2_;
+    mkHx2_ = mkHx1_; mkHx1_ = s; mkHy2_ = mkHy1_; mkHy1_ = sz;
+    mkSPow_ += kEnv_ * (sz * sz - mkSPow_);
+
+    // Carrier frequency from the zero crossings of S (no offset there): the
+    // tracker's own speed is not usable while it is still at rest after the
+    // gate opened on a turning record.
+    {
+        const double h = 0.1 * std::sqrt (2.0 * mkSPow_);
+        ++mkZcCount_;
+        ++mkHalfCount_;
+        if (mkZcPos_ ? (sz < -h) : (sz > h))
+        {
+            mkZcPos_ = ! mkZcPos_;
+            mkHalf2_ = mkHalf1_;
+            mkHalf1_ = mkHalfCount_;
+            mkHalfCount_ = 0;
+            if (mkZcPos_)
+            {
+                const double f = sr_ / double (mkZcCount_);
+                mkZcSteady_ = (mkZcFreq_ > 0.0 && std::abs (f - mkZcFreq_) < 0.1 * mkZcFreq_) ? mkZcSteady_ + 1 : 0;
+                mkZcFreq_ = (mkZcFreq_ > 0.0) ? mkZcFreq_ + 0.3 * (f - mkZcFreq_) : f;
+                mkZcCount_ = 0;
+            }
+        }
+        if (double (mkZcCount_) > 0.05 * sr_)
+        {
+            mkZcFreq_ = 0.0;
+            mkZcSteady_ = 0;
+        }
+        // Frequency from the last two half cycles only (follows a record that
+        // is speeding up): valid while they agree within 30 % and the next
+        // crossing is not overdue.
+        const int hMax = std::max (mkHalf1_, mkHalf2_);
+        mkHalfFreq_ = (mkHalf1_ > 0 && mkHalf2_ > 0 && std::abs (mkHalf1_ - mkHalf2_) < 0.3 * hMax
+                       && mkHalfCount_ < hMax + hMax / 2)
+                          ? sr_ / double (mkHalf1_ + mkHalf2_) : 0.0;
+    }
+    // The tracker is far off a steadily crossing carrier: it has not picked
+    // the record up yet, or sits on a false lock (see mk2Acquire). Steady
+    // means 8 crossings in a row within 10 %, which a scratch never is.
+    {
+        const bool fresh = mkZcFreq_ > 0.0 && double (mkZcCount_) < 2.0 * sr_ / mkZcFreq_;
+        const double ft  = std::abs (V_) * 0.5 * sr_; // tracker's carrier frequency
+        mkBehind_ = fresh && mkZcSteady_ >= 8 && mkZcFreq_ > kMkAcqMinSpeed * table_->def().resolution
+                    && std::abs (ft - mkZcFreq_) > 0.3 * mkZcFreq_;
+    }
+
+    // Carrier predicted for this sample in the calibrated frame. The tracker
+    // follows the doubled angle 0.5 - theta / pi; theta itself is known up to
+    // a half turn, settled by comparing with S (which has no offset). Not
+    // while the tracker is behind: the prediction stands still then, and the
+    // half-turn decision would follow every half cycle of S.
+    double mCar = 0.0;
+    if (gateOpen_ && ! mkBehind_)
+    {
+        const double Xp = X_ + V_ + 0.5 * A_;
+        const double th = kPi * (0.5 - Xp);
+        double cs = std::cos (th), sn = std::sin (th);
+        if (std::abs (cs) > 0.5)
+            mkPol_ += kMkPol_ * ((s * cs >= 0.0 ? 1.0 : -1.0) - mkPol_);
+        if (mkPol_ < 0.0) { cs = -cs; sn = -sn; }
+        // back from the calibrated frame (see step 3 of processSample)
+        const double gainR = std::sqrt (eLL_ / std::max (eRR_, 1e-12));
+        const double rho   = std::clamp (eLR_ / std::sqrt (std::max (eLL_ * eRR_, 1e-24)), -0.6, 0.6);
+        const double invSk = 1.0 / std::sqrt (1.0 - rho * rho);
+        mCar = (std::sqrt (2.0 * mkSPow_) * sn / invSk + rho * s) / gainR;
+    }
+
+    // Offset: a type-2 tracking filter (level and slope, critically damped)
+    // on M minus the predicted carrier. Unlike a low-pass it follows the
+    // offset's ramps without lag; its bandwidth follows the carrier frequency
+    // so that carrier prediction errors stay mostly out of it.
+    const double res = table_->def().resolution;
+    const double fcar = std::max (std::abs (speedNow_) * res, mkZcFreq_);
+    const double fn   = std::max (kMkCutMinHz, kMkCutRatio * fcar);
+    const double w    = std::min (kTwoPi * fn / sr_, 0.6);
+    const double cp   = mkC_ + mkD_;
+    const double e    = (m - mCar) - cp;
+
+    mkC_ = cp + 2.0 * w * e;
+    mkD_ += w * w * e;
+
+    // S for the tracker: a high-pass at a fixed fraction of the carrier
+    // frequency (15 %, 5-400 Hz). A hand pushing the record puts a component
+    // below ~150 Hz up to 2-3 x the carrier on S; in fast strokes it moved the
+    // circle off centre and the tracker lost its way (crackle). Tied to the
+    // carrier the phase lead stays the same small amount (~12 deg) at any
+    // speed, and near a reversal the cut-off goes down to 5 Hz (a fixed
+    // high-pass would shift a slow carrier by up to 90 deg with the sign of
+    // the direction).
+    {
+        const double fh = std::clamp (kMkLHpRatio * fcar, kMkLHpMinHz, kMkLHpMaxHz);
+        const double w0 = kTwoPi * fh / sr_, cw = std::cos (w0), al = std::sin (w0) / std::sqrt (2.0);
+        const double a0 = 1.0 + al;
+        const double b0 = (1.0 + cw) / 2.0 / a0, b1 = -(1.0 + cw) / a0;
+        const double a1 = -2.0 * cw / a0, a2 = (1.0 - al) / a0;
+        const double y = b0 * s + b1 * mkLx1_ + b0 * mkLx2_ - a1 * mkLy1_ - a2 * mkLy2_;
+        mkLx2_ = mkLx1_; mkLx1_ = s; mkLy2_ = mkLy1_; mkLy1_ = y;
+        l0 = y;
+    }
+    r0 = m - mkC_;
+
+    // Pulses: playback RIAA undone ((1 + s T1)(1 + s T3) / (1 + s T2)),
+    // then a high-pass that follows the speed.
+    const double y = mkShB0_ * mkC_ + mkShB1_ * mkShX_ - mkShA1_ * mkShY_;
+    mkShX_ = mkC_;
+    const double z = y + kRiaaT3 * sr_ * (y - mkShY_);
+    mkShY_ = y;
+    const double fhp = std::max (kMkHpMinHz, kMkHpPerSpeedHz * std::abs (speedNow_));
+    const double a   = 1.0 / (1.0 + kTwoPi * fhp / sr_);
+    mkHpY_ = a * (mkHpY_ + z - mkZPrev_);
+    mkZPrev_ = z;
+    mkV_ = mkHpY_;
+}
+
+// The tracker can stay at rest when the record starts under the needle (or
+// the gate opens on a turning record): while it does, the offset filter
+// removes part of the carrier from M, and S alone does not pull the tracker
+// (it cannot tell the two directions apart). If S has been crossing zero at a
+// steady rate for a while and the tracker is still far slower, start it at
+// that frequency. The direction is the sign of the correlation of M with the
+// change of S (M leads or lags S by about a quarter turn; its offset changes
+// far slower than S and averages out). The offset filter's output is no use
+// here: while the tracker is behind it turns M's carrier towards S.
+void TimecodeDecoder::mk2Acquire() noexcept
+{
+    mkQ_ += kMkQ_ * (mkM_ * (mkS_ - mkLPrev_) - mkQ_);
+    mkLPrev_ = mkS_;
+
+    const double vz    = 2.0 * mkZcFreq_ / sr_; // doubled-angle turns per sample
+    const double qRef  = 2.0 * mkSPow_ * kPi * mkZcFreq_ / sr_;
+
+    // A click (dust) lands in M and can pull the tracker to a stop within a
+    // few ms while S keeps crossing zero as before. If the tracker ran at
+    // that rate a moment ago, put it straight back (each click lost ~13 ms
+    // of record before).
+    const double ft = std::abs (V_) * 0.5 * sr_;
+    if (gateOpen_ && ! mkBehind_ && mkZcFreq_ > 0.0 && std::abs (ft - mkZcFreq_) < 0.1 * mkZcFreq_ && lockErr_ < 0.05)
+    {
+        mkGoodV_   = V_;
+        mkGoodX_   = X_;
+        mkGoodAge_ = 0;
+    }
+    else if (mkGoodAge_ < int (sr_))
+        ++mkGoodAge_;
+    if (gateOpen_ && mkBehind_ && mkGoodAge_ < int (kMkRestoreSeconds * sr_)
+        && std::abs (std::abs (mkGoodV_) * 0.5 * sr_ - mkZcFreq_) < 0.2 * mkZcFreq_)
+    {
+        // ... and the position where that speed has taken the record since
+        X_ = mkGoodX_ + mkGoodV_ * double (mkGoodAge_);
+        V_ = mkGoodV_;
+        A_ = 0.0;
+        mkGoodAge_ = int (sr_);
+        mkStuck_ = 0;
+        return;
+    }
+
+    // Quick start: the record moves again after it was held or turned round
+    // (tear scratches) and the tracker has not followed. Two half cycles of S
+    // that agree are enough here (the start-up help below needs a steady
+    // carrier, which an accelerating stroke is not).
+    {
+        const double fi = mkHalfFreq_;
+        const double qi = 2.0 * mkSPow_ * kPi * fi / sr_;
+        if (gateOpen_ && fi > kMkQuickMinSpeed * table_->def().resolution && (ft < 0.6 * fi || ft > 1.6 * fi)
+            && std::abs (mkQ_) > 0.3 * qi)
+        {
+            if (++mkQuick_ >= int (kMkQuickSeconds * sr_))
+            {
+                V_ = (mkQ_ > 0.0 ? 2.0 : -2.0) * fi / sr_;
+                A_ = 0.0;
+                mkQuick_ = 0;
+                mkStuck_ = 0;
+                return;
+            }
+        }
+        else
+            mkQuick_ = 0;
+    }
+
+    if (gateOpen_ && mkBehind_ && std::abs (mkQ_) > 0.3 * qRef)
+    {
+        if (++mkStuck_ >= int (kMkAcqSeconds * sr_))
+        {
+            V_ = mkQ_ > 0.0 ? vz : -vz;
+            A_ = 0.0;
+            mkStuck_ = 0;
+        }
+    }
+    else
+        mkStuck_ = 0;
+}
+
+void TimecodeDecoder::mk2Pulses() noexcept
+{
+    const double absSpeed = std::abs (speedNow_);
+    if (absSpeed > kMkRevSpeed)
+    {
+        const int vs = V_ >= 0.0 ? 1 : -1;
+        if (mkVSign_ != 0 && vs != mkVSign_)
+            mkReversed_ = true;
+        mkVSign_ = vs;
+    }
+    if (! gateOpen_ || table_ == nullptr || absSpeed < kMkMinBitSpeed || env_ <= 0.0)
+    {
+        mkCandOn_ = mkLastOn_ = false;
+        return;
+    }
+
+    const double u   = X_ * 0.5; // tracker position, cycles
+    const double v   = mkV_;
+    const double thr = kMkPulseThr * mkPulseLevel_ * env_ * absSpeed;
+    if (std::abs (v) > thr)
+    {
+        const int sg = v > 0.0 ? 1 : 0;
+        if (mkCandOn_ && sg != mkCandSign_)
+            mk2Candidate();
+        if (! mkCandOn_ || std::abs (v) > mkCandV_)
+        {
+            mkCandOn_     = true;
+            mkCandSign_   = sg;
+            mkCandV_      = std::abs (v);
+            mkCandU_      = u;
+            mkCandRel_    = double (dirSign_) * u + relShift_;
+            mkCandSpeed_  = absSpeed;
+            mkCandEnv_    = env_;
+        }
+    }
+    if (mkCandOn_ && std::abs (u - mkCandU_) > kMkPulseSpan)
+        mk2Candidate();
+}
+
+void TimecodeDecoder::mk2Candidate() noexcept
+{
+    mkCandOn_ = false;
+#ifdef VT_DEBUG_MK
+    const double level = mkCandV_ / std::max (mkCandEnv_ * mkCandSpeed_, 1e-12);
+    std::fprintf (stderr, "pulse sign=%d u=%.3f level=%.3f learned=%.3f speed=%.3f\n",
+                  mkCandSign_, mkCandU_, level, mkPulseLevel_, mkCandSpeed_);
+#endif
+    // The next boundary is at least a bit away: closer pulses are the
+    // opposite-sign lobe of the last one (the filters ring a little).
+    if (mkLastOn_ && ! mkReversed_ && std::abs (mkCandU_ - mkLastU_) < 0.75 * table_->def().cyclesPerBit)
+        return;
+    onTransition (mkCandSign_, mkCandU_, mkCandRel_, mkCandSpeed_);
+}
+
+void TimecodeDecoder::onTransition (int sign, double u, double rel, double absSpeed) noexcept
+{
+    const double cpb = table_->def().cyclesPerBit;
+    const bool   run = mkLastOn_ && ! mkReversed_ && sign != mkLastSign_;
+    const double gap = std::abs (u - mkLastU_) / cpb;
+    const int    nb  = int (std::lround (gap));
+    const int    trackDir = u >= mkLastU_ ? 1 : -1;
+    const uint32_t level  = uint32_t (mkLastSign_);
+    mkLastOn_   = true;
+    mkLastSign_ = sign;
+    mkLastU_    = u;
+    mkReversed_ = false;
+    if (! run || nb < 1 || nb > kMkMaxRunBits || std::abs (gap - double (nb)) > kMkGapTol)
+    {
+#ifdef VT_DEBUG_MK
+        std::fprintf (stderr, "break run=%d nb=%d gap=%.3f speed=%.3f\n", int (run), nb, gap, absSpeed);
+#endif
+        return; // not a measured run of bits (start, reversal, missed pulse)
+    }
+
+    // Pulse level, learned from pulses that fit the bit grid only (noise read
+    // while the tracker is lost, divided by a near-zero speed, would drive it
+    // up and the threshold above the real pulses).
+    {
+        const double pulse = mkCandV_ / std::max (mkCandEnv_ * mkCandSpeed_, 1e-12);
+        mkPulseLevel_ += kMkPulseLearn * (std::clamp (pulse, 0.5 * mkPulseLevel_, 2.0 * mkPulseLevel_) - mkPulseLevel_);
+        mkPulseLevel_ = std::clamp (mkPulseLevel_, kMkPulseInit / 3.0, kMkPulseInit * 3.0);
+    }
+
+    const LfsrTable& t = *table_;
+    const int nbits = t.def().bits;
+
+    // Hypotheses: bit polarity (an inverting preamp / cable) x which tracker
+    // direction is forward on the record (L / R order). Bits come in time
+    // order; backwards they enter the register from the other end.
+    for (int idx = 0; idx < 4; ++idx)
+    {
+        Hypothesis& h = hyp_[idx];
+        const uint32_t b = level ^ uint32_t (idx >> 1);
+        const int dir = trackDir * ((idx & 1) == 0 ? 1 : -1); // +1 = forward on the record
+        for (int j = 0; j < nb; ++j)
+        {
+            if (dir > 0)
+            {
+                h.bits     = (h.bits >> 1) | (b << (nbits - 1));
+                h.expected = t.forward (h.expected);
+            }
+            else
+            {
+                h.bits     = ((h.bits << 1) & t.mask()) | b;
+                h.expected = t.reverse (h.expected);
+            }
+            if (h.bits == h.expected && t.lookup (h.bits) >= 0)
+                ++h.valid;
+            else
+            {
+#ifdef VT_DEBUG_MK
+                if (idx == selected_ && h.valid >= kLockBits)
+                    std::fprintf (stderr, "biterr valid=%d nb=%d j=%d speed=%.3f\n", h.valid, nb, j, absSpeed);
+#endif
+                h.expected = h.bits;
+                h.valid    = 0;
+            }
+        }
+        h.lastDir = dir;
+
+        if (idx == selected_)
+            selectedBad_ = (h.valid >= kLockBits) ? 0 : selectedBad_ + nb;
+
+        // Unlike Serato's amplitude bits, the offset reads the same in both
+        // directions (no half-cycle shift backwards), so backward readings
+        // lock and anchor too.
+        if (h.valid < kLockBits)
+            continue;
+
+        if (selected_ < 0 || (selectedBad_ > kSwitchAfterBits && h.valid >= 2 * kLockBits))
+        {
+            selectedBad_ = 0;
+            if (selected_ != idx)
+            {
+                const int newDir = (idx & 1) == 0 ? 1 : -1;
+                if (selected_ < 0 || newDir != dirSign_)
+                    anchored_ = false;
+                selected_ = idx;
+                relShift_ += double (dirSign_ - newDir) * X_ * 0.5;
+                dirSign_  = newDir;
+                rel = double (dirSign_) * u + relShift_;
+            }
+        }
+        if (idx != selected_)
+            continue;
+        if (absSpeed < kMkAnchorMinSpeed || absSpeed > kMkAnchorMaxSpeed)
+            continue;
+
+        // The pulse is the boundary next to the newest bit in the register:
+        // its end going forward, its start going backward (the newest bit is
+        // then the oldest of the state). The filters' delay to the pulse peak
+        // is a few microseconds and is ignored.
+        const int32_t n = t.lookup (h.bits);
+        const double boundary  = dir > 0 ? cpb * double (n + 1) : cpb * double (n - nbits + 1);
+        const double offsetNew = boundary - rel;
+#ifdef VT_DEBUG_MK
+        {
+            // phase of the bit grid against the tracker's own coordinate (without relShift_)
+            const double g = boundary - double (dirSign_) * u;
+            std::fprintf (stderr, "anchor n=%d dir=%d speed=%.3f raw=%.4f frac=%.4f\n", n, dir, absSpeed, offsetNew,
+                          g - 0.5 * std::floor (g / 0.5));
+        }
+#endif
+        anchor (offsetNew, h.valid);
     }
 }
 

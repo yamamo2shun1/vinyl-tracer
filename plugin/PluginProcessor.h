@@ -115,8 +115,10 @@ private:
     bool loadCuesFromLibrary();  // false when the current sample has no entry
     void saveCuesToLibrary();
 
-    // Timecode tables (built once, ~8 MB)
-    std::array<std::unique_ptr<vt::LfsrTable>, 2> tables;
+    // Timecode tables (Serato A / B, Traktor MK2 A / B), built once per
+    // process and shared by all instances (~22 MB)
+    static constexpr int kNumTimecodes = 4;
+    std::array<const vt::LfsrTable*, kNumTimecodes> tables {};
 
     vt::TimecodeDecoder decoder;
     vt::ScratchPlayer   player;

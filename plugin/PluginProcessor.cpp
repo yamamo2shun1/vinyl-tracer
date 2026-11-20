@@ -10,9 +10,23 @@
 
 namespace
 {
-const juce::StringArray kTimecodeNames { "Serato CV02 Side A", "Serato CV02 Side B" };
+// New timecodes go at the end: saved sessions store the index.
+const juce::StringArray kTimecodeNames { "Serato CV02 Side A", "Serato CV02 Side B",
+                                         "Traktor MK2 Side A", "Traktor MK2 Side B" };
 const juce::StringArray kModeNames     { "Absolute", "Relative" };
 const juce::StringArray kRpmNames      { "33 1/3", "45" };
+
+// Built on first use (the first instance), shared by all instances.
+const std::array<std::unique_ptr<vt::LfsrTable>, 4>& sharedTables()
+{
+    static const std::array<std::unique_ptr<vt::LfsrTable>, 4> t {
+        std::make_unique<vt::LfsrTable> (vt::kSeratoSideA),
+        std::make_unique<vt::LfsrTable> (vt::kSeratoSideB),
+        std::make_unique<vt::LfsrTable> (vt::kTraktorMk2SideA),
+        std::make_unique<vt::LfsrTable> (vt::kTraktorMk2SideB)
+    };
+    return t;
+}
 } // namespace
 
 //==============================================================================
@@ -22,8 +36,9 @@ VinylTracerProcessor::VinylTracerProcessor()
                           .withOutput ("Output",   juce::AudioChannelSet::stereo(), true)),
       apvts (*this, nullptr, "PARAMS", createLayout())
 {
-    tables[0] = std::make_unique<vt::LfsrTable> (vt::kSeratoSideA);
-    tables[1] = std::make_unique<vt::LfsrTable> (vt::kSeratoSideB);
+    static_assert (kNumTimecodes == 4, "kTimecodeNames / sharedTables");
+    for (int i = 0; i < kNumTimecodes; ++i)
+        tables[size_t (i)] = sharedTables()[size_t (i)].get();
 
     pTimecode  = apvts.getRawParameterValue ("timecode");
     pMode      = apvts.getRawParameterValue ("mode");
@@ -113,11 +128,12 @@ void VinylTracerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     }
 
     // Parameters
-    const int tc = juce::jlimit (0, 1, int (pTimecode->load()));
+    const int tc = juce::jlimit (0, kNumTimecodes - 1, int (pTimecode->load()));
     if (tc != currentTimecode)
     {
-        decoder.setTable (tables[size_t (tc)].get());
+        decoder.setTable (tables[size_t (tc)]);
         currentTimecode = tc;
+        lastMode = -1; // the position scale may change: re-base Relative mode
     }
     decoder.setGateDb (pThreshold->load());
     if (nominalRequest.exchange (false))
@@ -153,7 +169,11 @@ void VinylTracerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
     const bool thru = pThru->load() > 0.5f;
 
     vt::ScratchPlayer::Params pp;
-    pp.cyclesPerSecond = tables[size_t (tc)]->def().resolution * (int (pRpm->load()) == 1 ? 1.35 : 1.0);
+    // Record positions here (and the player's thresholds) are in cycles of a
+    // 1000 Hz carrier, i.e. ms of record at 33 1/3 rpm. Other carriers
+    // (Traktor MK2: 2500 Hz) are scaled to that.
+    const double toMs  = 1000.0 / tables[size_t (tc)]->def().resolution;
+    pp.cyclesPerSecond = 1000.0 * (int (pRpm->load()) == 1 ? 1.35 : 1.0);
     pp.gain            = juce::Decibels::decibelsToGain (pGain->load());
     pp.loop            = pLoop->load() > 0.5f;
 
@@ -226,13 +246,13 @@ void VinylTracerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
         // 2. record position in the current mode's coordinates
         if (mode != lastMode)
         {
-            if (mode == 1) relBase = lastVinyl - posRel[0]; // continue seamlessly
+            if (mode == 1) relBase = lastVinyl - posRel[0] * toMs; // continue seamlessly
             lastMode = mode;
         }
         if (mode == 1)
-            for (int i = 0; i < n; ++i) vinyl[size_t (i)] = posRel[size_t (i)] + relBase;
+            for (int i = 0; i < n; ++i) vinyl[size_t (i)] = posRel[size_t (i)] * toMs + relBase;
         else
-            for (int i = 0; i < n; ++i) vinyl[size_t (i)] = posAbs[size_t (i)];
+            for (int i = 0; i < n; ++i) vinyl[size_t (i)] = posAbs[size_t (i)] * toMs;
         lastVinyl = vinyl[size_t (n - 1)];
 
         // 3. sample start: automatically at the first absolute lock; a jump (a

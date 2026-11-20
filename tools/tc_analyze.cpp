@@ -3,7 +3,7 @@
 //
 // tc_analyze - run the timecode decoder over a WAV recording of a turntable.
 //
-//   tc_analyze input.wav [--side A|B] [--gate -36] [--csv trace.csv] [--block 128]
+//   tc_analyze input.wav [--side A|B|MK2A|MK2B] [--gate -36] [--csv trace.csv] [--block 128]
 //
 // Record the timecode through JUMBLEQ (or any interface) at 44.1/48/96 kHz,
 // stereo, without processing. The tool prints a summary and optionally writes
@@ -12,6 +12,7 @@
 #include "TimecodeDecoder.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -90,7 +91,7 @@ int main (int argc, char** argv)
 {
     if (argc < 2)
     {
-        std::printf ("usage: tc_analyze input.wav [--side A|B] [--gate dB] [--csv out.csv] [--block N] [--window t0 t1]...\n"
+        std::printf ("usage: tc_analyze input.wav [--side A|B|MK2A|MK2B] [--gate dB] [--csv out.csv] [--block N] [--window t0 t1]...\n"
                      "                  [--nominal dB] [--scope out.bin t0 t1]\n");
         return 1;
     }
@@ -113,12 +114,19 @@ int main (int argc, char** argv)
     std::vector<Window> windows;
     const char* in = argv[1];
     const char* csv = nullptr;
-    bool sideB = false;
+    bool sideB = false, mk2 = false;
     float gate = -36.f;
     int block = 128;
     for (int i = 2; i < argc; ++i)
     {
-        if (! std::strcmp (argv[i], "--side") && i + 1 < argc)  sideB = (argv[++i][0] == 'B' || argv[i][0] == 'b');
+        if (! std::strcmp (argv[i], "--side") && i + 1 < argc)
+        {
+            // A, B (Serato CV02) or MK2A, MK2B (Traktor Control Vinyl MK2)
+            std::string v (argv[++i]);
+            for (auto& c : v) c = char (std::toupper (static_cast<unsigned char> (c)));
+            mk2   = v.rfind ("MK2", 0) == 0;
+            sideB = ! v.empty() && v.back() == 'B';
+        }
         else if (! std::strcmp (argv[i], "--gate") && i + 1 < argc)  gate = float (std::atof (argv[++i]));
         else if (! std::strcmp (argv[i], "--csv") && i + 1 < argc)   csv = argv[++i];
         else if (! std::strcmp (argv[i], "--block") && i + 1 < argc) block = std::max (1, std::atoi (argv[++i]));
@@ -143,7 +151,8 @@ int main (int argc, char** argv)
     std::string err;
     if (! readWav (in, L, R, sr, err)) { std::fprintf (stderr, "error: %s\n", err.c_str()); return 1; }
 
-    const vt::LfsrTable table (sideB ? vt::kSeratoSideB : vt::kSeratoSideA);
+    const vt::LfsrTable table (mk2 ? (sideB ? vt::kTraktorMk2SideB : vt::kTraktorMk2SideA)
+                                   : (sideB ? vt::kSeratoSideB : vt::kSeratoSideA));
     vt::TimecodeDecoder dec;
     dec.prepare (sr);
     dec.setTable (&table);
@@ -157,7 +166,9 @@ int main (int argc, char** argv)
 
     const size_t N = L.size();
     std::vector<double> pos (static_cast<size_t> (block)), rel (static_cast<size_t> (block));
-    std::vector<float> spd (static_cast<size_t> (block));
+    std::vector<float> spd (static_cast<size_t> (block)), qual (static_cast<size_t> (block));
+    // Signal quality while moving: the player turns the level down below 0.5
+    size_t movSamples = 0, lowQ = 0, lowRuns = 0, lowRun = 0, lowLongest = 0;
 
     // Steps in the output: second difference of the tracked position (cycles
     // per sample^2). Smooth motion stays far below kStep even in scratches;
@@ -166,8 +177,22 @@ int main (int argc, char** argv)
     double r1 = 0.0, r2 = 0.0, maxStep = 0.0;
     size_t steps = 0, seen = 0;
 
+    // Position jitter above 100 Hz while playing near 1x (2nd-order high-pass
+    // of the position: a steady ramp gives 0), in microseconds of record so
+    // that carriers of different frequency compare. Counted after 0.2 s of
+    // steady play (the filter settles).
+    double hb0, hb1, hb2, ha1, ha2;
+    {
+        const double w0 = 2.0 * 3.141592653589793 * 100.0 / sr, cw = std::cos (w0), al = std::sin (w0) / std::sqrt (2.0);
+        const double a0 = 1.0 + al;
+        hb0 = (1.0 + cw) / 2.0 / a0; hb1 = -(1.0 + cw) / a0; hb2 = hb0;
+        ha1 = -2.0 * cw / a0;        ha2 = (1.0 - al) / a0;
+    }
+    double hx1 = 0, hx2 = 0, hy1 = 0, hy2 = 0, jitSum = 0;
+    size_t jitN = 0, steady = 0;
+
     FILE* out = csv ? std::fopen (csv, "w") : nullptr;
-    if (out) std::fprintf (out, "time_s,record_s,speed,signal,code_lock,anchored,level_db\n");
+    if (out) std::fprintf (out, "time_s,record_s,speed,signal,code_lock,anchored,level_db,quality_min\n");
 
     size_t sigSamples = 0, lockSamples = 0;
     double firstAnchor = -1.0;
@@ -178,7 +203,7 @@ int main (int argc, char** argv)
         // Steps are counted once the direction is known (the relative position
         // changes sign when it is detected).
         const bool count = dec.status().anchored;
-        dec.process (L.data() + i, R.data() + i, n, pos.data(), rel.data(), spd.data());
+        dec.process (L.data() + i, R.data() + i, n, pos.data(), rel.data(), spd.data(), qual.data());
         for (int k = 0; k < n; ++k)
         {
             const double r0 = rel[size_t (k)];
@@ -194,6 +219,29 @@ int main (int argc, char** argv)
                     w.step = std::max (w.step, d2);
                 }
             r2 = r1; r1 = r0; ++seen;
+
+            if (std::abs (spd[size_t (k)]) > 0.05f && count)
+            {
+                ++movSamples;
+                if (qual[size_t (k)] < 0.5f)
+                {
+                    ++lowQ;
+                    if (++lowRun == size_t (0.002 * sr)) ++lowRuns;
+                    lowLongest = std::max (lowLongest, lowRun);
+                }
+                else
+                    lowRun = 0;
+            }
+
+            const double hy = hb0 * r0 + hb1 * hx1 + hb2 * hx2 - ha1 * hy1 - ha2 * hy2;
+            hx2 = hx1; hx1 = r0; hy2 = hy1; hy1 = hy;
+            const double av = std::abs (double (spd[size_t (k)]));
+            steady = (count && av > 0.8 && av < 1.25) ? steady + 1 : 0;
+            if (double (steady) > 0.2 * sr)
+            {
+                jitSum += hy * hy;
+                ++jitN;
+            }
         }
         const auto& st = dec.status();
         if (scopePath)
@@ -235,8 +283,9 @@ int main (int argc, char** argv)
         if (out && t - lastCsv >= 0.001)
         {
             lastCsv = t;
-            std::fprintf (out, "%.4f,%.5f,%.4f,%d,%d,%d,%.1f\n", t, pos[size_t (n - 1)] / table.def().resolution,
-                          spd[size_t (n - 1)], int (st.signal), int (st.bitLock), int (st.anchored), st.levelDb);
+            std::fprintf (out, "%.4f,%.5f,%.4f,%d,%d,%d,%.1f,%.3f\n", t, pos[size_t (n - 1)] / table.def().resolution,
+                          spd[size_t (n - 1)], int (st.signal), int (st.bitLock), int (st.anchored), st.levelDb,
+                          double (*std::min_element (qual.begin(), qual.begin() + n)));
         }
     }
     if (out) std::fclose (out);
@@ -262,11 +311,17 @@ int main (int argc, char** argv)
     std::printf ("first abs. lock : %s\n", firstAnchor < 0 ? "never" : (std::to_string (firstAnchor) + " s").c_str());
     std::printf ("corrections     : %d\n", st.reanchors);
     std::printf ("detected config : %d (primary=%s, polarity=%s, direction=%s)\n", st.config,
-                 st.config < 0 ? "-" : ((st.config >> 2) ? "L" : "R"),
+                 (st.config < 0 || mk2) ? "-" : ((st.config >> 2) ? "L" : "R"), // MK2: no primary channel
                  st.config < 0 ? "-" : (((st.config >> 1) & 1) ? "neg" : "pos"),
                  st.config < 0 ? "-" : ((st.config & 1) ? "inverted" : "normal"));
     std::printf ("nominal level   : %.1f dBFS\n", st.refDb);
     std::printf ("output steps    : %zu (> %.3f cycles), largest %.4f cycles\n", steps, kStep, maxStep);
+    if (movSamples > 0)
+        std::printf ("quality < 0.5   : %.2f %% of moving time, %zu stretches > 2 ms, longest %.1f ms\n",
+                     100.0 * double (lowQ) / double (movSamples), lowRuns, 1000.0 * double (lowLongest) / sr);
+    if (jitN > 0)
+        std::printf ("jitter > 100 Hz : %.1f us RMS (near 1x, %.1f s)\n",
+                     std::sqrt (jitSum / double (jitN)) / table.def().resolution * 1e6, double (jitN) / sr);
     for (const auto& w : windows)
         std::printf ("window %6.2f-%6.2f s: moved %.3f cycles, largest step %.4f\n",
                      w.t0, w.t1, w.hi >= w.lo ? w.hi - w.lo : 0.0, w.step);
