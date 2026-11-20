@@ -4,6 +4,7 @@
 // test_player.cpp - end-to-end check: synthetic timecode -> decoder -> player.
 // Compares the audio rendered from decoded positions with the audio rendered
 // from the true record positions (same player), and measures CPU time.
+#include "DropoutMetrics.h"
 #include "ScratchPlayer.h"
 #include "Synth.h"
 #include "TimecodeDecoder.h"
@@ -17,6 +18,72 @@
 
 using namespace vt;
 using namespace vt::test;
+
+// --------------------------------------------------------------------------
+// Traktor MK2: drop-outs of the rendered output while the record moves (see
+// DropoutMetrics.h). Positions go to the player in ms (1000 Hz cycles), as
+// the plugin does.
+static void mk2Dropouts (const char* name, const LfsrTable& table, const std::vector<double>& theta,
+                         const SynthOptions& opt, const std::vector<char>& still, const SampleData& tone)
+{
+    const double sr = opt.sampleRate, res = table.def().resolution, toMs = 1000.0 / res;
+    std::vector<float> L, R;
+    synthesize (table, theta, opt, L, R);
+    TimecodeDecoder dec; dec.prepare (sr); dec.setTable (&table); dec.setGateDb (-36.f);
+    ScratchPlayer play, playNq;
+    play.prepare (sr); playNq.prepare (sr);
+    ScratchPlayer::Params p;
+    p.cueCycles = theta.front() * toMs;
+    p.loop = true;
+
+    const size_t N = theta.size();
+    std::vector<double> pos (N);
+    std::vector<float> q (N), oL (N), oR (N), nL (N), nR (N);
+    for (size_t i = 0; i < N; i += 128)
+    {
+        const int n = int (std::min<size_t> (128, N - i));
+        dec.process (L.data() + i, R.data() + i, n, pos.data() + i, nullptr, nullptr, q.data() + i);
+        for (int k = 0; k < n; ++k) pos[i + size_t (k)] *= toMs;
+        play.render (&tone, pos.data() + i, n, p, oL.data() + i, oR.data() + i, q.data() + i);
+        playNq.render (&tone, pos.data() + i, n, p, nL.data() + i, nR.data() + i, nullptr);
+    }
+    const size_t w = size_t (std::lround (0.001 * sr)), nw = N / w;
+    std::vector<double> ts (nw), ds (nw);
+    for (size_t k = 0; k < nw; ++k)
+    {
+        const size_t a = k * w, b = std::min (N - 1, (k + 1) * w);
+        ts[k] = std::abs (theta[b] - theta[a]) * toMs / (1000.0 * double (b - a) / sr);
+        ds[k] = std::abs (pos[b] - pos[a]) / (1000.0 * double (b - a) / sr);
+    }
+    const std::vector<char> valid (nw, 1);
+    printDropouts (name, measureDropouts (oL, oR, nL, nR, sr, ts, ds, valid, still));
+}
+
+static void runMk2()
+{
+    const LfsrTable table (kTraktorMk2SideB);
+    const SampleData tone = makeQuadratureTone();
+    SynthOptions opt;
+    opt.level = 0.22; opt.gainR = 0.95; opt.skewDeg = 0.0; // as in test_decoder --mk2
+    const double sr = opt.sampleRate, res = table.def().resolution, start = 2.5 * 400000.0;
+    std::printf ("\nTraktor MK2: drop-outs of a looped quadrature tone (1 ms windows above 0.5x, < -20 dBFS)\n");
+
+    const auto th = integrateSpeed (scratchProfile (30, sr, 13), start, sr, res);
+    mk2Dropouts ("scratch 30 s", table, th, opt, {}, tone);
+    SynthOptions o = opt; o.handVertical = 3.0; o.handCommon = 1.0;
+    mk2Dropouts ("scratch 30 s, hand (tear)", table, th, o, {}, tone);
+    o.handVertical = 6.0; o.handCommon = 2.0;
+    mk2Dropouts ("scratch 30 s, hand (tear-hard)", table, th, o, {}, tone);
+
+    // stopped record with knocks: 1 s play, stopped by hand in 0.2 s, 10 s still
+    std::vector<double> v (size_t (1.0 * sr), 1.0);
+    for (size_t i = 0; i < size_t (0.2 * sr); ++i) v.push_back (1.0 - double (i) / (0.2 * sr));
+    v.resize (size_t (11.2 * sr), 0.0);
+    std::vector<char> still (v.size() / size_t (std::lround (0.001 * sr)), 0);
+    std::fill (still.begin() + 1500, still.end(), char (1)); // from 1.5 s
+    o = opt; o.vibration = 0.0316;
+    mk2Dropouts ("standstill 10 s, vibration -30 dB", table, integrateSpeed (v, start, sr, res), o, still, tone);
+}
 
 int main()
 {
@@ -140,5 +207,6 @@ int main()
         }
         std::fclose (f);
     }
+    runMk2();
     return 0;
 }

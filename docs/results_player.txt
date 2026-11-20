@@ -1,3 +1,137 @@
 constant decoder offset: -0.206 ms of record time
 position jitter above 100 Hz: 16.19 us RMS
 CPU: decoder 0.43 % + player 0.36 % of one core (48 kHz, one deck)
+
+# Traktor MK2: drop-outs of a looped quadrature tone (1 ms windows above 0.5x, < -20 dBFS)
+scratch 30 s                       drop-outs above 0.5x: 39 in 20089 ms evaluated, total 133 ms (no quality: 130 ms), length median 4 p90 5 max 6 ms | cause quality 0 speed 3 other 36
+scratch 30 s, hand (tear)          drop-outs above 0.5x: 84 in 20089 ms evaluated, total 1053 ms (no quality: 986 ms), length median 4 p90 12 max 324 ms | cause quality 11 speed 33 other 40
+scratch 30 s, hand (tear-hard)     drop-outs above 0.5x: 162 in 20089 ms evaluated, total 3691 ms (no quality: 3512 ms), length median 7 p90 60 max 311 ms | cause quality 22 speed 99 other 41
+standstill 10 s, vibration -30 dB  drop-outs above 0.5x: 1 in 1100 ms evaluated, total 2 ms (no quality: 2 ms), length median 2 p90 2 max 2 ms | cause quality 0 speed 0 other 1 | standstill: 0 of 9700 ms at -40 dBFS or above
+
+# Traktor MK2 recordings (tc_analyze --eval --eval-ref tests/mk2_eval_refs.txt, decoder as in ed7f92b;
+# wav/traktor/rec is outside the repository)
+--eval (b_33_baby1): 9 reference points, 0 needle drops, 0 standstill spans
+reference 1.080 -> 1.581 s: integrated -37.74 ms vs -39.01 ms (ok)
+reference 1.581 -> 2.304 s: integrated +16.70 ms vs +18.19 ms (ok)
+reference 2.304 -> 2.824 s: integrated -8.54 ms vs -8.47 ms (ok)
+reference 2.824 -> 5.080 s: integrated -30.43 ms vs -29.06 ms (ok)
+reference 5.080 -> 6.448 s: direction gap at 5.720 s, not joined
+reference 6.448 -> 6.949 s: integrated -9.69 ms vs -9.39 ms (ok)
+reference 6.949 -> 7.952 s: integrated +28.51 ms vs +27.98 ms (ok)
+reference 7.952 -> 8.453 s: integrated +6.18 ms vs +5.70 ms (ok)
+source          : looped quadrature tone
+drop-outs                          drop-outs above 0.5x: 0 in 4685 ms evaluated, total 0 ms (no quality: 0 ms), length median 0 p90 0 max 0 ms | cause quality 0 speed 0 other 0
+strokes         : 30 evaluated, 1 not anchored by the decoder, 5 excluded (no reference / direction gap / mismatch)
+  not anchored at: 0.542 s
+slips (>2 ms)   : 9 strokes, 612 ms in total, largest error 7.2 ms | error p50 0.26 p90 1.90 p99 5.01 ms
+  stroke at   6.225 s: 140 ms over 2 ms, max 3.2 ms
+  stroke at   1.920 s: 134 ms over 2 ms, max 5.2 ms
+  stroke at   7.764 s: 106 ms over 2 ms, max 3.8 ms
+  stroke at   3.449 s: 103 ms over 2 ms, max 2.4 ms
+  stroke at   8.744 s: 48 ms over 2 ms, max 2.3 ms
+reference covers: 8.2 of 10.7 s
+--eval (b_33_baby2): 10 reference points, 0 needle drops, 0 standstill spans
+reference 1.387 -> 2.333 s: integrated +1.76 ms vs +3.35 ms (ok)
+reference 2.333 -> 3.387 s: integrated +47.76 ms vs +48.52 ms (ok)
+reference 3.387 -> 3.888 s: integrated -10.64 ms vs -10.12 ms (ok)
+reference 3.888 -> 4.640 s: integrated -10.54 ms vs -10.42 ms (ok)
+reference 4.640 -> 5.333 s: integrated -34.60 ms vs -32.95 ms (ok)
+reference 5.333 -> 5.899 s: integrated +49.39 ms vs +49.49 ms (ok)
+reference 5.899 -> 6.400 s: integrated +11.06 ms vs +10.80 ms (ok)
+reference 6.400 -> 6.920 s: integrated +13.95 ms vs +15.03 ms (ok)
+reference 6.920 -> 8.157 s: integrated +8.87 ms vs +10.11 ms (ok)
+source          : looped quadrature tone
+drop-outs                          drop-outs above 0.5x: 1 in 4534 ms evaluated, total 1 ms (no quality: 1 ms), length median 1 p90 1 max 1 ms | cause quality 0 speed 0 other 1
+strokes         : 63 evaluated, 1 not anchored by the decoder, 6 excluded (no reference / direction gap / mismatch)
+  not anchored at: 1.111 s
+slips (>2 ms)   : 8 strokes, 786 ms in total, largest error 22.5 ms | error p50 0.31 p90 20.77 p99 22.39 ms
+  stroke at   2.785 s: 117 ms over 2 ms, max 22.4 ms
+  stroke at   4.309 s: 110 ms over 2 ms, max 21.8 ms
+  stroke at   2.911 s: 99 ms over 2 ms, max 21.9 ms
+  stroke at   7.438 s: 96 ms over 2 ms, max 21.6 ms
+  stroke at   4.192 s: 92 ms over 2 ms, max 22.4 ms
+reference covers: 8.0 of 10.5 s
+--eval (b_33_tear): 2 reference points, 0 needle drops, 0 standstill spans
+reference 2.880 -> 5.024 s: integrated -101.25 ms vs -101.26 ms (ok)
+source          : looped quadrature tone
+drop-outs                          drop-outs above 0.5x: 3 in 4038 ms evaluated, total 12 ms (no quality: 7 ms), length median 2 p90 8 max 8 ms | cause quality 1 speed 2 other 0
+strokes         : 17 evaluated, 0 not anchored by the decoder, 9 excluded (no reference / direction gap / mismatch)
+slips (>2 ms)   : 8 strokes, 424 ms in total, largest error 22.8 ms | error p50 0.22 p90 2.41 p99 22.77 ms
+  stroke at   4.646 s: 94 ms over 2 ms, max 4.1 ms
+  stroke at   3.268 s: 84 ms over 2 ms, max 4.4 ms
+  stroke at   3.592 s: 73 ms over 2 ms, max 4.6 ms
+  stroke at   4.180 s: 57 ms over 2 ms, max 2.5 ms
+  stroke at   2.607 s: 53 ms over 2 ms, max 22.8 ms
+reference covers: 3.5 of 6.9 s
+--eval (b_33_tear-hard): 4 reference points, 0 needle drops, 0 standstill spans
+reference 9.416 -> 10.264 s: integrated +103.53 ms vs +105.00 ms (ok)
+reference 10.264 -> 13.003 s: direction gap at 11.300 s, not joined
+reference 13.003 -> 20.453 s: direction gap at 13.665 s, not joined
+source          : looped quadrature tone
+drop-outs                          drop-outs above 0.5x: 82 in 11886 ms evaluated, total 355 ms (no quality: 108 ms), length median 4 p90 9 max 14 ms | cause quality 63 speed 9 other 10
+strokes         : 22 evaluated, 0 not anchored by the decoder, 37 excluded (no reference / direction gap / mismatch)
+slips (>2 ms)   : 20 strokes, 3003 ms in total, largest error 55.0 ms | error p50 1.60 p90 11.64 p99 51.02 ms
+  stroke at  11.406 s: 273 ms over 2 ms, max 55.0 ms
+  stroke at   8.693 s: 252 ms over 2 ms, max 5.5 ms
+  stroke at  12.049 s: 252 ms over 2 ms, max 24.9 ms
+  stroke at  19.319 s: 239 ms over 2 ms, max 34.1 ms
+  stroke at  19.797 s: 230 ms over 2 ms, max 26.3 ms
+reference covers: 8.0 of 21.3 s
+--eval (b_needle_up_drop2): 39 reference points, 5 needle drops, 0 standstill spans
+reference 10.424 -> 14.491 s: needle drop between
+reference 14.491 -> 14.992 s: integrated +501.81 ms vs +501.14 ms (ok)
+reference 14.992 -> 15.493 s: integrated +500.52 ms vs +500.84 ms (ok)
+reference 15.493 -> 15.995 s: integrated +501.47 ms vs +501.81 ms (ok)
+reference 15.995 -> 16.496 s: integrated +502.45 ms vs +501.80 ms (ok)
+reference 16.496 -> 16.997 s: integrated +500.59 ms vs +500.92 ms (ok)
+reference 16.997 -> 17.499 s: integrated +500.72 ms vs +501.05 ms (ok)
+reference 17.499 -> 18.000 s: integrated +502.80 ms vs +502.14 ms (ok)
+reference 18.000 -> 18.501 s: integrated +500.94 ms vs +501.26 ms (ok)
+reference 18.501 -> 19.003 s: integrated +500.62 ms vs +500.84 ms (ok)
+reference 19.003 -> 21.501 s: needle drop between
+reference 21.501 -> 22.003 s: integrated +501.33 ms vs +501.66 ms (ok)
+reference 22.003 -> 22.504 s: integrated +501.45 ms vs +500.79 ms (ok)
+reference 22.504 -> 23.005 s: integrated +500.82 ms vs +501.16 ms (ok)
+reference 23.005 -> 23.507 s: integrated +501.93 ms vs +502.26 ms (ok)
+reference 23.507 -> 24.008 s: integrated +501.93 ms vs +501.28 ms (ok)
+reference 24.008 -> 24.509 s: integrated +500.37 ms vs +500.69 ms (ok)
+reference 24.509 -> 25.011 s: integrated +501.52 ms vs +501.84 ms (ok)
+reference 25.011 -> 25.512 s: integrated +502.53 ms vs +501.87 ms (ok)
+reference 25.512 -> 26.013 s: integrated +500.53 ms vs +500.86 ms (ok)
+reference 26.013 -> 27.752 s: needle drop between
+reference 27.752 -> 28.253 s: integrated +500.49 ms vs +500.82 ms (ok)
+reference 28.253 -> 28.755 s: integrated +501.74 ms vs +502.08 ms (ok)
+reference 28.755 -> 29.256 s: integrated +502.19 ms vs +501.51 ms (ok)
+reference 29.256 -> 29.757 s: integrated +500.51 ms vs +500.85 ms (ok)
+reference 29.757 -> 30.259 s: integrated +501.03 ms vs +501.36 ms (ok)
+reference 30.259 -> 30.760 s: integrated +502.78 ms vs +502.11 ms (ok)
+reference 30.760 -> 33.219 s: needle drop between
+reference 33.219 -> 33.720 s: integrated +502.34 ms vs +501.67 ms (ok)
+reference 33.720 -> 34.221 s: integrated +501.41 ms vs +501.75 ms (ok)
+reference 34.221 -> 34.723 s: integrated +500.58 ms vs +500.91 ms (ok)
+reference 34.723 -> 35.224 s: integrated +500.72 ms vs +501.06 ms (ok)
+reference 35.224 -> 35.725 s: integrated +502.76 ms vs +502.09 ms (ok)
+reference 35.725 -> 36.227 s: integrated +500.97 ms vs +501.31 ms (ok)
+reference 36.227 -> 36.728 s: integrated +501.54 ms vs +500.87 ms (ok)
+reference 36.728 -> 37.229 s: integrated +501.22 ms vs +501.54 ms (ok)
+reference 37.229 -> 37.731 s: integrated +501.64 ms vs +501.98 ms (ok)
+reference 37.731 -> 38.232 s: integrated +501.68 ms vs +501.01 ms (ok)
+source          : looped quadrature tone
+drop-outs                          drop-outs above 0.5x: 9 in 24935 ms evaluated, total 139 ms (no quality: 94 ms), length median 18 p90 26 max 26 ms | cause quality 4 speed 5 other 0
+needle drop    5.822 s: re-anchor 4487.0 ms | ref: gate 2.0 ms | bitLock 4487.3 ms | reanchors+1 4644.7 ms
+needle drop   14.149 s: re-anchor  240.0 ms | ref: gate 3.0 ms | bitLock 179.0 ms | reanchors+1 192.3 ms
+needle drop   21.315 s: re-anchor   84.0 ms | ref: gate 2.3 ms | bitLock 79.7 ms | reanchors+1 85.0 ms
+needle drop   27.569 s: re-anchor   81.0 ms | ref: gate 1.7 ms | bitLock 79.0 ms | reanchors+1 28.3 ms
+needle drop   33.008 s: re-anchor  109.0 ms | ref: gate 2.7 ms | bitLock 106.7 ms | reanchors+1 109.3 ms
+strokes         : 0 evaluated, 0 not anchored by the decoder, 4 excluded (no reference / direction gap / mismatch)
+slips (>2 ms)   : n/a (no stroke with a decoded position to compare)
+reference covers: 24.9 of 43.4 s
+--eval (b_needle_up_drop): 0 reference points, 0 needle drops, 0 standstill spans
+source          : looped quadrature tone
+drop-outs                          drop-outs above 0.5x: n/a (S / M in quadrature for 8 ms only)
+--eval (b_not_move): 0 reference points, 0 needle drops, 1 standstill spans
+source          : looped quadrature tone
+drop-outs                          drop-outs above 0.5x: n/a (S / M in quadrature for 0 ms only) | standstill: 0 of 31546 ms at -40 dBFS or above
+--eval (b_not_move_hit): 0 reference points, 0 needle drops, 1 standstill spans
+source          : looped quadrature tone
+drop-outs                          drop-outs above 0.5x: n/a (S / M in quadrature for 0 ms only) | standstill: 0 of 33000 ms at -40 dBFS or above

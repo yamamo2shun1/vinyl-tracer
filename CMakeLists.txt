@@ -38,6 +38,7 @@ if(VT_BUILD_TESTS)
 
     add_executable(tc_analyze tools/tc_analyze.cpp)
     target_link_libraries(tc_analyze PRIVATE vt_core)
+    target_include_directories(tc_analyze PRIVATE tests) # DropoutMetrics.h (--eval)
 endif()
 
 # ---------------------------------------------------------------------------

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Shunichi Yamamoto
 //
-// Synth.h - test signal generator for Serato-style timecode.
+// Synth.h - test signal generator for Serato-style timecode (and Traktor
+// Control Vinyl MK2, see synthesizeOffset in Synth.cpp).
 //
 // Models the playback chain of a real turntable:
 //   groove signal a(theta)  (quadrature 1 kHz carrier, AM bits on one channel)
@@ -32,6 +33,16 @@ struct SynthOptions
     double skewDeg     = 8.0;    // quadrature error
     bool   swapLR      = false;  // test auto-detection
     bool   invertR     = false;
+    bool   invertL     = false;  // Traktor MK2: both inverted is a valid case, one alone is not
+    // Traktor MK2 (offset-encoded timecodes) only:
+    double mk2PhaseDeg = 82.0;   // L / R carrier phase difference on the record
+    double mk2Offset   = 1.2;    // common-mode bit offset (groove displacement, carrier = 1)
+    double mk2Ramp     = 1.0;    // width of the offset steps at the bit boundaries (cycles)
+                                 // (offset / ramp fitted to recordings: learned pulse level,
+                                 // loop residual and position jitter at 1x)
+    double handVertical = 0.0;   // 20-150 Hz L - R (anti-phase) component while the record is
+                                 // pushed / pulled, scales with |acceleration| (x carrier level)
+    double handCommon  = 0.0;    // the same band in phase on L and R (x carrier level)
     // Real-world disturbances seen on recordings (0 = off, relative to level):
     double handOffset  = 0.0;    // low-frequency (3-25 Hz) stylus displacement while the
                                  // record is pushed / pulled; scales with |acceleration|
@@ -47,5 +58,9 @@ void synthesize (const LfsrTable& table, const std::vector<double>& theta,
 // Integrate a speed profile (1.0 = nominal) into positions (cycles).
 std::vector<double> integrateSpeed (const std::vector<double>& speed, double startCycles,
                                     double sampleRate, double resolution);
+
+// Random scratching: piecewise speed targets with fast but finite acceleration
+// (6 ms lag), 1 s of normal play first, staying within +-1.5 s of the cue.
+std::vector<double> scratchProfile (double seconds, double sr, uint32_t seed, double maxSpeed = 4.0);
 
 } // namespace vt::test

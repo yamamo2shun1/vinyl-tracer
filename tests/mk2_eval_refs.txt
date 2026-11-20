@@ -1,0 +1,177 @@
+# Reference values for tc_analyze --eval on the Traktor MK2 recordings
+# (wav/traktor/rec, outside the repository). Fixed once so that later changes
+# of the decoder do not move the reference with it.
+#
+#   <recording> ref <time s> <position ms> <tolerance ms>   absolute position of the record
+#   <recording> drop <time s>                                needle landing (start of the carrier)
+#   <recording> still <t0 s> <t1 s>                          record known to be stopped
+#   <recording> polarity <+1|-1>                             sign of (L + R) x d(L - R)/dt that is forward on
+#                                                            the record (the same for all of these recordings;
+#                                                            found from the references, which agree best with -1)
+#
+# Tolerance 1 ms: the decoder's position has ~0.1 ms latency, and the L - R
+#   integration between two references closes within 1-2.3 ms (the closing error is
+#   spread over the way when it is within the sum of the two tolerances).
+# ref: from tc_analyze of ed7f92b (--csv, 1 row per ms) at moments with the bits
+#   verified (code_lock) and anchored for 100 ms, a fresh lock after the last
+#   loss of signal, 0.3-2.5x, and no correction from 100 ms before to 300 ms
+#   after (a slip can leave verified bits with a wrong position until the
+#   correction a few bits later). Consecutive references were then checked
+#   against the motion integrated from the phase of L - R (--eval): ones that
+#   disagree by more than the sum of the tolerances and have no confirmed
+#   neighbour were dropped. The check lines below each recording are the result.
+# drop: first 1 ms window of L - R above -40 dBFS after the lift (waveform).
+# still: b_not_move / b_not_move_hit stand still for the whole recording (needle
+#   on a stopped record; knocks at about 9.5, 11-12, 14.5-15.5 and 24 s in _hit).
+# b_needle_up_drop: no carrier at any time (the record was not turning), the
+#   decoder never locks: needle drops there cannot be measured.
+
+# b_33_baby1: 11 candidates, 27 corrections in ed7f92b
+# dropped 3.827 4.579
+#   1.080 -> 1.581: integrated -37.74 ms vs -39.01 ms (ok)
+#   1.581 -> 2.304: integrated +16.70 ms vs +18.19 ms (ok)
+#   2.304 -> 2.824: integrated -8.54 ms vs -8.47 ms (ok)
+#   2.824 -> 5.080: integrated -30.43 ms vs -29.06 ms (ok)
+#   5.080 -> 6.448: direction gap at 5.720 s, not joined
+#   6.448 -> 6.949: integrated -9.69 ms vs -9.39 ms (ok)
+#   6.949 -> 7.952: integrated +28.51 ms vs +27.98 ms (ok)
+#   7.952 -> 8.453: integrated +6.18 ms vs +5.70 ms (ok)
+b_33_baby1 ref 1.0800 39946.970 1.0
+b_33_baby1 ref 1.5813 39907.960 1.0
+b_33_baby1 ref 2.3040 39926.150 1.0
+b_33_baby1 ref 2.8240 39917.680 1.0
+b_33_baby1 ref 5.0800 39888.620 1.0
+b_33_baby1 ref 6.4480 39957.050 1.0
+b_33_baby1 ref 6.9493 39947.660 1.0
+b_33_baby1 ref 7.9520 39975.640 1.0
+b_33_baby1 ref 8.4533 39981.340 1.0
+b_33_baby1 polarity -1
+
+# b_33_baby2: 10 candidates, 14 corrections in ed7f92b
+#   1.387 -> 2.333: integrated +1.76 ms vs +3.35 ms (ok)
+#   2.333 -> 3.387: integrated +47.76 ms vs +48.52 ms (ok)
+#   3.387 -> 3.888: integrated -10.64 ms vs -10.12 ms (ok)
+#   3.888 -> 4.640: integrated -10.54 ms vs -10.42 ms (ok)
+#   4.640 -> 5.333: integrated -34.60 ms vs -32.95 ms (ok)
+#   5.333 -> 5.899: integrated +49.39 ms vs +49.49 ms (ok)
+#   5.899 -> 6.400: integrated +11.06 ms vs +10.80 ms (ok)
+#   6.400 -> 6.920: integrated +13.95 ms vs +15.03 ms (ok)
+#   6.920 -> 8.157: integrated +8.87 ms vs +10.11 ms (ok)
+b_33_baby2 ref 1.3867 39882.700 1.0
+b_33_baby2 ref 2.3333 39886.050 1.0
+b_33_baby2 ref 3.3867 39934.570 1.0
+b_33_baby2 ref 3.8880 39924.450 1.0
+b_33_baby2 ref 4.6400 39914.030 1.0
+b_33_baby2 ref 5.3333 39881.080 1.0
+b_33_baby2 ref 5.8987 39930.570 1.0
+b_33_baby2 ref 6.4000 39941.370 1.0
+b_33_baby2 ref 6.9200 39956.400 1.0
+b_33_baby2 ref 8.1573 39966.510 1.0
+b_33_baby2 polarity -1
+
+# b_33_tear: 2 candidates, 57 corrections in ed7f92b
+#   2.880 -> 5.024: integrated -101.25 ms vs -101.26 ms (ok)
+b_33_tear ref 2.8800 60496.660 1.0
+b_33_tear ref 5.0240 60395.400 1.0
+b_33_tear polarity -1
+
+# b_33_tear-hard: 8 candidates, 492 corrections in ed7f92b
+# dropped 2.731 3.277 7.285 8.832
+#   9.416 -> 10.264: integrated +103.53 ms vs +105.00 ms (ok)
+#   10.264 -> 13.003: direction gap at 11.300 s, not joined
+#   13.003 -> 20.453: direction gap at 13.665 s, not joined
+b_33_tear-hard ref 9.4160 83832.020 1.0
+b_33_tear-hard ref 10.2640 83937.020 1.0
+b_33_tear-hard ref 13.0027 83962.080 1.0
+b_33_tear-hard ref 20.4533 87253.580 1.0
+b_33_tear-hard polarity -1
+
+# b_needle_up_drop2: 40 candidates, 39 corrections in ed7f92b
+# dropped 31.475
+#   10.424 -> 14.491: needle drop between
+#   14.491 -> 14.992: integrated +501.81 ms vs +501.14 ms (ok)
+#   14.992 -> 15.493: integrated +500.52 ms vs +500.84 ms (ok)
+#   15.493 -> 15.995: integrated +501.47 ms vs +501.81 ms (ok)
+#   15.995 -> 16.496: integrated +502.45 ms vs +501.80 ms (ok)
+#   16.496 -> 16.997: integrated +500.59 ms vs +500.92 ms (ok)
+#   16.997 -> 17.499: integrated +500.72 ms vs +501.05 ms (ok)
+#   17.499 -> 18.000: integrated +502.80 ms vs +502.14 ms (ok)
+#   18.000 -> 18.501: integrated +500.94 ms vs +501.26 ms (ok)
+#   18.501 -> 19.003: integrated +500.62 ms vs +500.84 ms (ok)
+#   19.003 -> 21.501: needle drop between
+#   21.501 -> 22.003: integrated +501.33 ms vs +501.66 ms (ok)
+#   22.003 -> 22.504: integrated +501.45 ms vs +500.79 ms (ok)
+#   22.504 -> 23.005: integrated +500.82 ms vs +501.16 ms (ok)
+#   23.005 -> 23.507: integrated +501.93 ms vs +502.26 ms (ok)
+#   23.507 -> 24.008: integrated +501.93 ms vs +501.28 ms (ok)
+#   24.008 -> 24.509: integrated +500.37 ms vs +500.69 ms (ok)
+#   24.509 -> 25.011: integrated +501.52 ms vs +501.84 ms (ok)
+#   25.011 -> 25.512: integrated +502.53 ms vs +501.87 ms (ok)
+#   25.512 -> 26.013: integrated +500.53 ms vs +500.86 ms (ok)
+#   26.013 -> 27.752: needle drop between
+#   27.752 -> 28.253: integrated +500.49 ms vs +500.82 ms (ok)
+#   28.253 -> 28.755: integrated +501.74 ms vs +502.08 ms (ok)
+#   28.755 -> 29.256: integrated +502.19 ms vs +501.51 ms (ok)
+#   29.256 -> 29.757: integrated +500.51 ms vs +500.85 ms (ok)
+#   29.757 -> 30.259: integrated +501.03 ms vs +501.36 ms (ok)
+#   30.259 -> 30.760: integrated +502.78 ms vs +502.11 ms (ok)
+#   30.760 -> 33.219: needle drop between
+#   33.219 -> 33.720: integrated +502.34 ms vs +501.67 ms (ok)
+#   33.720 -> 34.221: integrated +501.41 ms vs +501.75 ms (ok)
+#   34.221 -> 34.723: integrated +500.58 ms vs +500.91 ms (ok)
+#   34.723 -> 35.224: integrated +500.72 ms vs +501.06 ms (ok)
+#   35.224 -> 35.725: integrated +502.76 ms vs +502.09 ms (ok)
+#   35.725 -> 36.227: integrated +500.97 ms vs +501.31 ms (ok)
+#   36.227 -> 36.728: integrated +501.54 ms vs +500.87 ms (ok)
+#   36.728 -> 37.229: integrated +501.22 ms vs +501.54 ms (ok)
+#   37.229 -> 37.731: integrated +501.64 ms vs +501.98 ms (ok)
+#   37.731 -> 38.232: integrated +501.68 ms vs +501.01 ms (ok)
+b_needle_up_drop2 ref 10.4240 71133.460 1.0
+b_needle_up_drop2 ref 14.4907 357790.330 1.0
+b_needle_up_drop2 ref 14.9920 358291.470 1.0
+b_needle_up_drop2 ref 15.4933 358792.310 1.0
+b_needle_up_drop2 ref 15.9947 359294.120 1.0
+b_needle_up_drop2 ref 16.4960 359795.920 1.0
+b_needle_up_drop2 ref 16.9973 360296.840 1.0
+b_needle_up_drop2 ref 17.4987 360797.890 1.0
+b_needle_up_drop2 ref 18.0000 361300.030 1.0
+b_needle_up_drop2 ref 18.5013 361801.290 1.0
+b_needle_up_drop2 ref 19.0027 362302.130 1.0
+b_needle_up_drop2 ref 21.5013 751792.180 1.0
+b_needle_up_drop2 ref 22.0027 752293.840 1.0
+b_needle_up_drop2 ref 22.5040 752794.630 1.0
+b_needle_up_drop2 ref 23.0053 753295.790 1.0
+b_needle_up_drop2 ref 23.5067 753798.050 1.0
+b_needle_up_drop2 ref 24.0080 754299.330 1.0
+b_needle_up_drop2 ref 24.5093 754800.020 1.0
+b_needle_up_drop2 ref 25.0107 755301.860 1.0
+b_needle_up_drop2 ref 25.5120 755803.730 1.0
+b_needle_up_drop2 ref 26.0133 756304.590 1.0
+b_needle_up_drop2 ref 27.7520 498848.880 1.0
+b_needle_up_drop2 ref 28.2533 499349.700 1.0
+b_needle_up_drop2 ref 28.7547 499851.780 1.0
+b_needle_up_drop2 ref 29.2560 500353.290 1.0
+b_needle_up_drop2 ref 29.7573 500854.140 1.0
+b_needle_up_drop2 ref 30.2587 501355.500 1.0
+b_needle_up_drop2 ref 30.7600 501857.610 1.0
+b_needle_up_drop2 ref 33.2187 270586.700 1.0
+b_needle_up_drop2 ref 33.7200 271088.370 1.0
+b_needle_up_drop2 ref 34.2213 271590.120 1.0
+b_needle_up_drop2 ref 34.7227 272091.030 1.0
+b_needle_up_drop2 ref 35.2240 272592.090 1.0
+b_needle_up_drop2 ref 35.7253 273094.180 1.0
+b_needle_up_drop2 ref 36.2267 273595.490 1.0
+b_needle_up_drop2 ref 36.7280 274096.360 1.0
+b_needle_up_drop2 ref 37.2293 274597.900 1.0
+b_needle_up_drop2 ref 37.7307 275099.880 1.0
+b_needle_up_drop2 ref 38.2320 275600.890 1.0
+b_needle_up_drop2 polarity -1
+b_needle_up_drop2 drop 5.822
+b_needle_up_drop2 drop 14.149
+b_needle_up_drop2 drop 21.315
+b_needle_up_drop2 drop 27.569
+b_needle_up_drop2 drop 33.008
+
+# b_not_move / b_not_move_hit: the whole recording
+b_not_move still 0.2 31.8
+b_not_move_hit still 0.2 33.2

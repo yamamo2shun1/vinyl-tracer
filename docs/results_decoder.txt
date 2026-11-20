@@ -20,3 +20,62 @@ back-cue 40x (1x / -2x)            relative position: end  -0.313 ms | max  0.31
 scratch 30 s, hand offset -12 dB   lock    66.7 ms | offset -0.219 ms | p99  1.035 ms | max  1.475 ms | drift  -0.188 ms | stuck  0.43 % | reanchor 28 | cfg 0 | 126.7 ns/smp | click 0.0307
 slow, hand offset -12 dB           lock    61.3 ms | offset -0.987 ms | p99  0.887 ms | max  1.050 ms | drift  -0.795 ms | stuck  0.00 % | reanchor 0 | cfg 0 |  92.6 ns/smp | click 0.0154
 standstill 10 s, vibration -30 dB  lock    61.3 ms | offset -1.634 ms | p99  0.987 ms | max  1.101 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 0 |  50.7 ns/smp | click 0.0233
+
+# Traktor Control Vinyl MK2 (vt_test_decoder, Windows / VS2022 Release, 2026-11-20)
+LFSR self-test Traktor MK2 Side A: OK
+LFSR self-test Traktor MK2 Side B: OK
+
+Traktor MK2 (48 kHz, block 128, cartridge+RIAA, noise -60 dB, R gain 0.95, phase 82 deg, offset 1.20)
+A start  +0.40x                    lock   136.0 ms | offset -0.115 ms | p99  0.031 ms | max  0.037 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 134.8 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+A start  -0.40x                    lock   128.0 ms | offset +0.042 ms | p99  0.026 ms | max  0.032 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 137.6 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+A start  +1.00x                    lock    53.3 ms | offset -0.112 ms | p99  0.020 ms | max  0.023 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 142.3 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+A start  -1.00x                    lock    48.0 ms | offset +0.034 ms | p99  0.016 ms | max  0.018 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 141.5 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+A start  +2.16x                    lock    24.0 ms | offset -0.138 ms | p99  0.010 ms | max  0.013 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 157.5 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+A start  -2.16x                    lock    24.0 ms | offset +0.104 ms | p99  0.008 ms | max  0.012 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 159.6 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+A middle +0.40x                    lock   130.7 ms | offset -0.109 ms | p99  0.030 ms | max  0.036 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 144.3 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+A middle -0.40x                    lock   128.0 ms | offset +0.042 ms | p99  0.026 ms | max  0.032 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 139.4 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+A middle +1.00x                    lock    53.3 ms | offset -0.111 ms | p99  0.020 ms | max  0.023 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 146.3 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+A middle -1.00x                    lock    50.7 ms | offset +0.033 ms | p99  0.016 ms | max  0.019 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 144.8 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+A middle +2.16x                    lock    24.0 ms | offset -0.119 ms | p99  0.010 ms | max  0.013 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 154.6 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+A middle -2.16x                    lock    24.0 ms | offset +0.063 ms | p99  0.008 ms | max  0.011 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 153.2 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+A end    +0.40x                    lock   136.0 ms | offset -0.095 ms | p99  0.031 ms | max  0.037 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 144.4 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+A end    -0.40x                    lock   112.0 ms | offset +0.040 ms | p99  0.026 ms | max  0.032 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 135.7 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+A end    +1.00x                    lock    50.7 ms | offset -0.093 ms | p99  0.020 ms | max  0.023 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 144.0 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+A end    -1.00x                    lock    48.0 ms | offset +0.064 ms | p99  0.016 ms | max  0.019 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 149.8 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+A end    +2.16x                    lock    26.7 ms | offset +0.012 ms | p99  0.010 ms | max  0.013 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 147.8 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+A end    -2.16x                    lock    24.0 ms | offset +0.071 ms | p99  0.008 ms | max  0.012 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 151.8 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+B start  +0.40x                    lock   141.3 ms | offset -0.095 ms | p99  0.031 ms | max  0.037 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 139.2 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+B start  -0.40x                    lock   120.0 ms | offset +0.029 ms | p99  0.026 ms | max  0.032 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 145.1 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+B start  +1.00x                    lock    56.0 ms | offset -0.092 ms | p99  0.020 ms | max  0.023 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 144.3 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+B start  -1.00x                    lock    48.0 ms | offset +0.034 ms | p99  0.016 ms | max  0.019 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 144.9 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+B start  +2.16x                    lock    24.0 ms | offset -0.004 ms | p99  0.010 ms | max  0.014 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 157.4 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+B start  -2.16x                    lock    24.0 ms | offset -0.056 ms | p99  0.008 ms | max  0.012 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 155.9 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+B middle +0.40x                    lock   138.7 ms | offset -0.115 ms | p99  0.031 ms | max  0.038 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 136.6 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+B middle -0.40x                    lock   122.7 ms | offset +0.042 ms | p99  0.026 ms | max  0.032 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 139.3 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+B middle +1.00x                    lock    48.0 ms | offset -0.092 ms | p99  0.020 ms | max  0.023 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 147.3 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+B middle -1.00x                    lock    45.3 ms | offset +0.066 ms | p99  0.016 ms | max  0.019 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 145.2 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+B middle +2.16x                    lock    26.7 ms | offset -0.129 ms | p99  0.010 ms | max  0.014 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 155.4 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+B middle -2.16x                    lock    24.0 ms | offset +0.114 ms | p99  0.008 ms | max  0.012 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 153.4 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+B end    +0.40x                    lock   120.0 ms | offset -0.096 ms | p99  0.032 ms | max  0.037 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 141.4 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+B end    -0.40x                    lock   117.3 ms | offset +0.043 ms | p99  0.026 ms | max  0.032 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 139.7 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+B end    +1.00x                    lock    50.7 ms | offset -0.093 ms | p99  0.020 ms | max  0.023 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 143.8 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+B end    -1.00x                    lock    56.0 ms | offset +0.065 ms | p99  0.016 ms | max  0.019 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 143.8 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+B end    +2.16x                    lock    26.7 ms | offset -0.129 ms | p99  0.010 ms | max  0.014 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 156.4 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+B end    -2.16x                    lock    26.7 ms | offset +0.095 ms | p99  0.008 ms | max  0.011 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 | 156.7 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+swap L/R +1x                       lock    48.0 ms | offset -0.094 ms | p99  0.020 ms | max  0.022 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 0 | 141.7 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+swap L/R -1x                       lock    53.3 ms | offset +0.034 ms | p99  0.016 ms | max  0.019 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 0 | 146.3 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+invert L+R +1x                     lock    48.0 ms | offset -0.093 ms | p99  0.020 ms | max  0.023 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 3 | 151.6 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+invert L+R -1x                     lock    53.3 ms | offset +0.034 ms | p99  0.016 ms | max  0.018 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 3 | 155.2 ns/smp | sign 100.00 % | |err|<=1ms 100.00 % | PASS
+scratch 300 s (<=4x)               lock    56.0 ms | offset +0.016 ms | p99 21.839 ms | max 34.948 ms | drift  +0.119 ms | stuck  3.40 % | reanchor 733 | cfg 1 | 145.6 ns/smp | sign  98.96 % | |err|<=1ms  81.16 %
+scratch 300 s (<=6x flicks)        lock    56.0 ms | offset +0.012 ms | p99 21.920 ms | max 24.979 ms | drift  +0.081 ms | stuck  3.41 % | reanchor 746 | cfg 1 | 154.7 ns/smp | sign  99.07 % | |err|<=1ms  73.91 %
+scratch 30 s, hand (tear)          lock    56.0 ms | offset -0.024 ms | p99 694.147 ms | max 1170.941 ms | drift  +0.047 ms | stuck 11.41 % | reanchor 90 | cfg 1 | 150.8 ns/smp | sign  94.93 % | |err|<=1ms  38.04 %
+scratch 30 s, hand (tear-hard)     lock    56.0 ms | offset -0.093 ms | p99 1302.472 ms | max 1841.997 ms | drift -65.168 ms | stuck 25.70 % | reanchor 74 | cfg 1 | 136.3 ns/smp | sign  86.55 % | |err|<=1ms  24.15 %
+scratch 30 s @ 44.1 kHz            lock    58.0 ms | offset +0.037 ms | p99 21.829 ms | max 23.007 ms | drift  +0.104 ms | stuck  3.95 % | reanchor 85 | cfg 1 | 144.6 ns/smp | sign  98.66 % | |err|<=1ms  79.77 %
+scratch 30 s @ 96.0 kHz            lock    57.3 ms | offset +0.044 ms | p99 21.957 ms | max 23.022 ms | drift  -0.097 ms | stuck  3.72 % | reanchor 84 | cfg 1 | 137.0 ns/smp | sign  98.33 % | |err|<=1ms  78.00 %
+scratch 30 s, block 1024           lock    42.7 ms | offset +0.025 ms | p99 19.006 ms | max 23.016 ms | drift  -0.099 ms | stuck  2.88 % | reanchor 73 | cfg 1 | 139.7 ns/smp | sign  98.97 % | |err|<=1ms  85.54 %
+needle drop traktor_mk2b 1.00x     re-anchor   56.5 ms | ref: gate    1.3 ms | bitLock   52.0 ms | reanchors+1   57.3 ms
+needle drop traktor_mk2a 1.00x     re-anchor   56.5 ms | ref: gate    1.3 ms | bitLock   54.7 ms | reanchors+1   57.3 ms
+standstill 10 s, vibration -30 dB  lock    56.0 ms | offset +0.110 ms | p99  0.000 ms | max  0.000 ms | drift  +0.000 ms | stuck  0.00 % | reanchor 0 | cfg 1 |  86.0 ns/smp | sign 100.00 % | |err|<=1ms 100.00 %
+back-cue 40x (1x / -2x)            relative position: end  +0.277 ms | max  1.141 ms | reanchor 79
+
+Traktor MK2 checks: PASS (0 failed)
