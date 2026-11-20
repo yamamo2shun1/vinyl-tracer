@@ -336,7 +336,7 @@ int runEval (const std::vector<float>& L, const std::vector<float>& R, double sr
     {
         double gapMove = 0.0, cum = 0.0;
         const int step = kb >= ka ? 1 : -1;
-        for (size_t k = ka; k != kb; k = size_t (long long (k) + step))
+        for (size_t k = ka; k != kb; k = static_cast<size_t> (static_cast<long long> (k) + step))
         {
             const size_t kw = step > 0 ? k : k - 1; // window crossed
             if (dir[kw] == 0)
@@ -349,7 +349,7 @@ int runEval (const std::vector<float>& L, const std::vector<float>& R, double sr
                 gapMove = 0.0;
                 p += double (step) * double (pol * dir[kw]) * magMs[kw];
             }
-            if (out) { const size_t kn = size_t (long long (k) + step); (*out)[kn] = p; (*ok)[kn] = 1; }
+            if (out) { const size_t kn = static_cast<size_t> (static_cast<long long> (k) + step); (*out)[kn] = p; (*ok)[kn] = 1; }
         }
         if (stopAt) *stopAt = kb;
         return p;
