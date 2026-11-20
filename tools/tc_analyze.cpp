@@ -486,7 +486,7 @@ int runEval (const std::vector<float>& L, const std::vector<float>& R, double sr
 
     std::vector<double> pos (N);
     std::vector<float> q (N), oL (N), oR (N), nL (N), nR (N);
-    struct Blk { size_t end; bool signal, bitLock, anchored; int reanchors; };
+    struct Blk { size_t end; bool signal, bitLock, anchored; int reanchors, validBits; };
     std::vector<Blk> blocks;
     for (size_t i = 0; i < N; i += size_t (block))
     {
@@ -496,7 +496,7 @@ int runEval (const std::vector<float>& L, const std::vector<float>& R, double sr
         play.render (&src, pos.data() + i, n, pp, oL.data() + i, oR.data() + i, q.data() + i);
         playNq.render (&src, pos.data() + i, n, pp, nL.data() + i, nR.data() + i, nullptr);
         const auto& st = dec.status();
-        blocks.push_back ({ i + size_t (n), st.signal, st.bitLock, st.anchored, st.reanchors });
+        blocks.push_back ({ i + size_t (n), st.signal, st.bitLock, st.anchored, st.reanchors, st.validBits });
     }
     std::vector<char> anchoredW (nw, 0);
     {
@@ -551,6 +551,48 @@ int runEval (const std::vector<float>& L, const std::vector<float>& R, double sr
                 std::printf (" | standstill: %.0f of %.0f ms at -40 dBFS or above", dr.stillLoudMs, dr.stillMs);
             std::printf ("\n");
         }
+
+        // Lock while moving, against windows fixed by the input (a moving
+        // carrier at 0.3x or more, not a known standstill), so that two
+        // decoder versions are compared on the same time. bitLock outlives
+        // the signal (the bit count is only reset by a wrong bit), so a window
+        // counts only with the gate open and 24 bits verified since the gate
+        // last closed.
+        std::vector<char> fresh (nw, 0);
+        {
+            int newBits = 0, lastValid = 0;
+            bool wasOpen = true;
+            size_t b = 0;
+            std::vector<char> fb (blocks.size(), 0);
+            for (size_t j = 0; j < blocks.size(); ++j)
+            {
+                const auto& bk = blocks[j];
+                if (! bk.signal) newBits = 0;
+                else if (! wasOpen) newBits = 0, lastValid = bk.validBits;
+                else if (bk.validBits >= lastValid) newBits += bk.validBits - lastValid;
+                else newBits = bk.validBits; // count reset by a wrong bit (or a new hypothesis)
+                lastValid = bk.validBits;
+                wasOpen = bk.signal;
+                fb[j] = bk.signal && bk.bitLock && newBits >= 24 ? 1 : 0;
+            }
+            for (size_t k = 0; k < nw; ++k)
+            {
+                while (b + 1 < blocks.size() && blocks[b].end <= k * w) ++b;
+                fresh[k] = fb[b];
+            }
+        }
+        double motionMs = 0.0, lockedMs = 0.0;
+        for (size_t k = 0; k < nw; ++k)
+        {
+            if (! moving[k] || still[k] || ts[k] < 0.3) continue;
+            motionMs += 1000.0 * wSec;
+            if (fresh[k]) lockedMs += 1000.0 * wSec;
+        }
+        if (motionMs >= 50.0)
+            std::printf ("lock in motion  : %.1f %% of %.0f ms (moving carrier >= 0.3x; gate open, 24 bits verified since it last closed)\n",
+                         100.0 * lockedMs / motionMs, motionMs);
+        else
+            std::printf ("lock in motion  : n/a (moving carrier >= 0.3x for %.0f ms only)\n", motionMs);
     }
 
     // ---- needle drops --------------------------------------------------------

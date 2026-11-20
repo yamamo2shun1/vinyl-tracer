@@ -21,6 +21,7 @@ reference 6.949 -> 7.952 s: integrated +28.51 ms vs +27.98 ms (ok)
 reference 7.952 -> 8.453 s: integrated +6.18 ms vs +5.70 ms (ok)
 source          : looped quadrature tone
 drop-outs                          drop-outs above 0.5x: 0 in 4685 ms evaluated, total 0 ms (no quality: 0 ms), length median 0 p90 0 max 0 ms | cause quality 0 speed 0 other 0
+lock in motion  : 55.4 % of 6052 ms (moving carrier >= 0.3x; gate open, 24 bits verified since it last closed)
 strokes         : 30 evaluated, 1 not anchored by the decoder, 5 excluded (no reference / direction gap / mismatch)
   not anchored at: 0.542 s
 slips (>2 ms)   : 9 strokes, 612 ms in total, largest error 7.2 ms | error p50 0.26 p90 1.90 p99 5.01 ms
@@ -42,6 +43,7 @@ reference 6.400 -> 6.920 s: integrated +13.95 ms vs +15.03 ms (ok)
 reference 6.920 -> 8.157 s: integrated +8.87 ms vs +10.11 ms (ok)
 source          : looped quadrature tone
 drop-outs                          drop-outs above 0.5x: 1 in 4534 ms evaluated, total 1 ms (no quality: 1 ms), length median 1 p90 1 max 1 ms | cause quality 0 speed 0 other 1
+lock in motion  : 25.9 % of 6043 ms (moving carrier >= 0.3x; gate open, 24 bits verified since it last closed)
 strokes         : 63 evaluated, 1 not anchored by the decoder, 6 excluded (no reference / direction gap / mismatch)
   not anchored at: 1.111 s
 slips (>2 ms)   : 8 strokes, 786 ms in total, largest error 22.5 ms | error p50 0.31 p90 20.77 p99 22.39 ms
@@ -55,6 +57,7 @@ reference covers: 8.0 of 10.5 s
 reference 2.880 -> 5.024 s: integrated -101.25 ms vs -101.26 ms (ok)
 source          : looped quadrature tone
 drop-outs                          drop-outs above 0.5x: 3 in 4038 ms evaluated, total 12 ms (no quality: 7 ms), length median 2 p90 8 max 8 ms | cause quality 1 speed 2 other 0
+lock in motion  : 60.8 % of 4483 ms (moving carrier >= 0.3x; gate open, 24 bits verified since it last closed)
 strokes         : 17 evaluated, 0 not anchored by the decoder, 9 excluded (no reference / direction gap / mismatch)
 slips (>2 ms)   : 8 strokes, 424 ms in total, largest error 22.8 ms | error p50 0.22 p90 2.41 p99 22.77 ms
   stroke at   4.646 s: 94 ms over 2 ms, max 4.1 ms
@@ -69,6 +72,7 @@ reference 10.264 -> 13.003 s: direction gap at 11.300 s, not joined
 reference 13.003 -> 20.453 s: direction gap at 13.665 s, not joined
 source          : looped quadrature tone
 drop-outs                          drop-outs above 0.5x: 82 in 11886 ms evaluated, total 355 ms (no quality: 108 ms), length median 4 p90 9 max 14 ms | cause quality 63 speed 9 other 10
+lock in motion  : 39.1 % of 13743 ms (moving carrier >= 0.3x; gate open, 24 bits verified since it last closed)
 strokes         : 22 evaluated, 0 not anchored by the decoder, 37 excluded (no reference / direction gap / mismatch)
 slips (>2 ms)   : 20 strokes, 3003 ms in total, largest error 55.0 ms | error p50 1.60 p90 11.64 p99 51.02 ms
   stroke at  11.406 s: 273 ms over 2 ms, max 55.0 ms
@@ -118,6 +122,7 @@ reference 37.229 -> 37.731 s: integrated +501.64 ms vs +501.98 ms (ok)
 reference 37.731 -> 38.232 s: integrated +501.68 ms vs +501.01 ms (ok)
 source          : looped quadrature tone
 drop-outs                          drop-outs above 0.5x: 9 in 24935 ms evaluated, total 139 ms (no quality: 94 ms), length median 18 p90 26 max 26 ms | cause quality 4 speed 5 other 0
+lock in motion  : 79.0 % of 24939 ms (moving carrier >= 0.3x; gate open, 24 bits verified since it last closed)
 needle drop    5.822 s: re-anchor 4487.0 ms | ref: gate 2.0 ms | bitLock 4487.3 ms | reanchors+1 4644.7 ms
 needle drop   14.149 s: re-anchor  240.0 ms | ref: gate 3.0 ms | bitLock 179.0 ms | reanchors+1 192.3 ms
 needle drop   21.315 s: re-anchor   84.0 ms | ref: gate 2.3 ms | bitLock 79.7 ms | reanchors+1 85.0 ms
@@ -129,9 +134,46 @@ reference covers: 24.9 of 43.4 s
 --eval (b_needle_up_drop): 0 reference points, 0 needle drops, 0 standstill spans
 source          : looped quadrature tone
 drop-outs                          drop-outs above 0.5x: n/a (S / M in quadrature for 8 ms only)
+lock in motion  : n/a (moving carrier >= 0.3x for 27 ms only)
 --eval (b_not_move): 0 reference points, 0 needle drops, 1 standstill spans
 source          : looped quadrature tone
 drop-outs                          drop-outs above 0.5x: n/a (S / M in quadrature for 0 ms only) | standstill: 0 of 31546 ms at -40 dBFS or above
+lock in motion  : n/a (moving carrier >= 0.3x for 0 ms only)
 --eval (b_not_move_hit): 0 reference points, 0 needle drops, 1 standstill spans
 source          : looped quadrature tone
 drop-outs                          drop-outs above 0.5x: n/a (S / M in quadrature for 0 ms only) | standstill: 0 of 33000 ms at -40 dBFS or above
+lock in motion  : n/a (moving carrier >= 0.3x for 0 ms only)
+
+# Traktor MK2 lock in motion (tc_analyze --eval without references: moving carrier >= 0.3x,
+# gate open and 24 bits verified since it last closed), corrections and jitter near 1x (tc_analyze)
+a_33_all_pitch+0_other       lock   98.2  corr   93  jitter   4.6
+b_33_all_pitch+0             lock   95.2  corr  341  jitter   6.2
+b_33_pitch+0_normal          lock   98.4  corr    2  jitter   4.6
+b_33_pitch+0_rev             lock   95.6  corr    0  jitter   4.7
+b_33_pitch+10_normal         lock   98.3  corr    3  jitter   4.5
+b_33_pitch+10_rev            lock   98.6  corr    0  jitter   4.5
+b_33_pitch+20_normal         lock   98.4  corr    2  jitter     -
+b_33_pitch+40_normal         lock   98.1  corr    2  jitter     -
+b_33_pitch+40_rev            lock   98.5  corr    0  jitter     -
+b_33_pitch+60_normal         lock   98.4  corr    2  jitter     -
+b_33_pitch+60_rev            lock   98.1  corr    0  jitter     -
+b_33_pitch-10_normal         lock   98.1  corr    2  jitter   4.8
+b_33_pitch-10_rev            lock   98.3  corr    0  jitter   4.7
+b_33_pitch-20_normal         lock   98.0  corr    2  jitter     -
+b_33_pitch-20_rev            lock   98.2  corr    0  jitter     -
+b_33_pitch-40_normal         lock   92.2  corr    2  jitter     -
+b_33_pitch-40_rev            lock   97.7  corr    0  jitter     -
+b_33_pitch-60_normal         lock   95.7  corr    0  jitter     -
+b_33_pitch-60_rev            lock   96.7  corr    0  jitter     -
+b_33_pitch-sweep             lock   98.5  corr    5  jitter   4.4
+b_45_pitch+0_normal          lock   98.4  corr    2  jitter     -
+b_45_pitch+0_rev             lock   98.1  corr    0  jitter     -
+b_45_pitch+30_normal         lock   98.3  corr    2  jitter     -
+b_45_pitch+30_rev            lock   96.9  corr    0  jitter     -
+b_45_pitch+60_normal         lock   95.8  corr    6  jitter     -
+b_45_pitch+60_rev            lock   97.6  corr    4  jitter     -
+b_45_pitch-30_normal         lock   97.7  corr    3  jitter   4.7
+b_45_pitch-30_rev            lock   98.4  corr    0  jitter   4.6
+b_45_pitch-60_normal         lock   93.0  corr    2  jitter     -
+b_45_pitch-60_rev            lock   96.1  corr    0  jitter     -
+b_pitch+20_rev               lock   98.2  corr    0  jitter     -
