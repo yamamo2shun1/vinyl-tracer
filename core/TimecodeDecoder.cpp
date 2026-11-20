@@ -76,6 +76,8 @@ constexpr double kMkAcqSeconds   = 0.01;   // ... when the tracker stayed this l
 constexpr double kMkQuickMinSpeed = 0.15;  // quick start for carriers above this ...
 constexpr double kMkQuickSeconds = 0.001;  // ... after the tracker stayed this long far below them
 constexpr double kMkRestoreSeconds = 0.02; // after a click: restore the speed the tracker had this recently
+constexpr double kMkBpQ          = 2.0;    // band-pass pair on S for the tracker assist
+constexpr double kMkCorrGate     = 0.9;    // blend only while the S and M measurements agree this well
 constexpr double kMkAnchorMinSpeed = 0.3;  // the offset is read cleanly well below the Serato range
 constexpr double kMkAnchorMaxSpeed = 2.5;
 
@@ -126,6 +128,8 @@ void TimecodeDecoder::prepare (double sampleRate)
     coast_ = std::exp (-1.0 / (0.010 * sr_));
     kMkPol_ = onePole (sr_, kMkPolSeconds);
     kMkQ_   = onePole (sr_, 0.001);
+    kMkDelta_ = onePole (sr_, 0.05);
+    kMkCorr_  = 1.0 / 24.0; // agreement of the two measurements over 24 samples
     {
         // 2nd-order Butterworth high-pass, 120 Hz (zero crossings of S)
         const double w0 = kTwoPi * 120.0 / sr_, cw = std::cos (w0), al = std::sin (w0) / std::sqrt (2.0);
@@ -200,6 +204,12 @@ void TimecodeDecoder::reset()
     mkHalfFreq_ = 0.0;
     mkPol_ = 1.0;
     mkShX_ = mkShY_ = mkZPrev_ = mkHpY_ = mkV_ = 0.0;
+    mkBpX1_ = mkBpX2_ = mkBpY1_ = mkBpY2_ = mkApX1_ = mkApY1_ = 0.0;
+    mkBpF0_ = 0.0;
+    mkBpI_ = mkBpQ_ = 0.0;
+    mkDelta_ = 0.0;
+    mkDeltaOk_ = false;
+    mkCorr_ = 0.0;
     mkPulseLevel_ = kMkPulseInit;
     setTable (table_);
     status_ = DecoderStatus {};
@@ -392,18 +402,23 @@ void TimecodeDecoder::processSample (float xl, float xr) noexcept
         // passes the origin and the angle swings (a 0.4-cycle jump and a click
         // in the output). Limited to the instant of the turn, the loop does not
         // lose cycles on pull-backs.
+        double weight = 1.0;
         if (slowSpeed_ < kWeightMaxSpeed || std::abs (speedNow_) < kReversalWeightSpeed)
         {
             const double q = std::min (mag / std::max (env_, 1e-12), 1.0);
-            resid *= q * q;
+            weight = q * q;
         }
+        const double residM = resid * weight;
         // Lock detector: on a real carrier the residual stays small; on noise
         // it is large and random. Without this the loop, whose bandwidth grows
         // with speed, can run away on noise that keeps the gate open.
-        lockErr_ += kLockErr_ * (std::abs (resid) - lockErr_);
-        X_ = Xp + loopA_ * resid;
-        V_ = Vp + loopB_ * resid;
-        A_ += loopC_ * resid;
+        lockErr_ += kLockErr_ * (std::abs (residM) - lockErr_);
+        // MK2: the phase update may blend in the S-derived measurement
+        // (mk2Assist); lockErr_ above always uses the M-based residual.
+        const double residUpd = mk2_ ? mk2Assist (meas, Xp, resid, weight, residM) : residM;
+        X_ = Xp + loopA_ * residUpd;
+        V_ = Vp + loopB_ * residUpd;
+        A_ += loopC_ * residUpd;
         if (lockErr_ > kLockLost)
         {
             V_ *= coast_; // following noise: let the speed die away
@@ -959,6 +974,32 @@ void TimecodeDecoder::mk2FrontEnd (double& l0, double& r0) noexcept
     mkC_ = cp + 2.0 * w * e;
     mkD_ += w * w * e;
 
+    // Band-pass pair on S for the tracker assist: a Q = 2 band-pass at the
+    // carrier frequency (0 dB, 0 deg at the centre) and a first-order
+    // all-pass tuned to -90 deg at the same frequency. Together they give
+    // S's phase directly; on a clean constant-speed recording the phase
+    // steps of the pair are ~150x steadier than a 2-sample difference of S.
+    {
+        const double f0 = std::clamp (fcar, 150.0, 4200.0);
+        if (mkBpF0_ <= 0.0 || std::abs (f0 - mkBpF0_) > 0.05 * mkBpF0_)
+        {
+            mkBpF0_ = f0;
+            const double w0 = kTwoPi * f0 / sr_, cw = std::cos (w0), al = std::sin (w0) / (2.0 * kMkBpQ);
+            const double a0 = 1.0 + al;
+            mkBpB0_ = al / a0;
+            mkBpB2_ = -al / a0;
+            mkBpA1_ = -2.0 * cw / a0;
+            mkBpA2_ = (1.0 - al) / a0;
+            const double t = std::tan (0.5 * w0);
+            mkApA_ = (t - 1.0) / (t + 1.0);
+        }
+        const double bi = mkBpB0_ * s + mkBpB2_ * mkBpX2_ - mkBpA1_ * mkBpY1_ - mkBpA2_ * mkBpY2_;
+        mkBpX2_ = mkBpX1_; mkBpX1_ = s; mkBpY2_ = mkBpY1_; mkBpY1_ = bi;
+        mkBpI_ = bi;
+        mkBpQ_ = mkApA_ * bi + mkApX1_ - mkApA_ * mkApY1_;
+        mkApX1_ = bi; mkApY1_ = mkBpQ_;
+    }
+
     // S for the tracker: a high-pass at a fixed fraction of the carrier
     // frequency (15 %, 5-400 Hz). A hand pushing the record puts a component
     // below ~150 Hz up to 2-3 x the carrier on S; in fast strokes it moved the
@@ -990,6 +1031,55 @@ void TimecodeDecoder::mk2FrontEnd (double& l0, double& r0) noexcept
     mkHpY_ = a * (mkHpY_ + z - mkZPrev_);
     mkZPrev_ = z;
     mkV_ = mkHpY_;
+}
+
+// Tracker assist from S (issue #2, step 2 continued, stage 1). The M-based
+// measurement degrades while a hand disturbs the offset estimate; S carries
+// the same carrier with no offset. The band-pass pair in mk2FrontEnd gives
+// S's doubled angle; a slowly learned constant aligns it to the M frame
+// (the pair's phase response and the S/M phase relation are constant at a
+// given speed). While the two measurements agree (smoothed cosine of their
+// difference >= kMkCorrGate over 24 samples), the S measurement is blended
+// into the phase update with weight min (1, |speed| / 0.5). Nothing else
+// changes: lockErr_ (quality), the bit path and the anchor logic all keep
+// the M-based values, and Serato never reaches this code.
+double TimecodeDecoder::mk2Assist (double meas, double Xp, double residRaw, double weight, double residM) noexcept
+{
+    const double amp = std::sqrt (mkBpI_ * mkBpI_ + mkBpQ_ * mkBpQ_);
+    const double ref = std::sqrt (2.0 * mkSPow_);
+    if (! (ref > 0.0) || amp < 0.3 * ref)
+    {
+        mkCorr_ += kMkCorr_ * (0.0 - mkCorr_);
+        return residM;
+    }
+    const double measS = atan2Turns (2.0 * mkBpI_ * mkBpQ_, mkBpQ_ * mkBpQ_ - mkBpI_ * mkBpI_);
+    double dAlign = (meas - measS) - mkDelta_;
+    dAlign -= std::floor (dAlign + 0.5);
+    if (! mkDeltaOk_)
+    {
+        mkDelta_  = meas - measS;
+        mkDeltaOk_ = true;
+    }
+    else if (std::abs (residRaw) < 0.05)
+    {
+        // Learn the alignment only while the M measurement itself tracks
+        // well; a disturbed M must not drag the S frame with it.
+        mkDelta_ += kMkDelta_ * dAlign;
+    }
+    double dNow = (meas - measS) - mkDelta_;
+    dNow -= std::floor (dNow + 0.5);
+    mkCorr_ += kMkCorr_ * (std::cos (kTwoPi * dNow) - mkCorr_);
+    if (std::abs (mkCorr_) < kMkCorrGate)
+        return residM;
+    const double w = std::min (1.0, std::abs (speedNow_) / 0.5);
+    if (w <= 0.0)
+        return residM;
+    const double ms = measS + mkDelta_;
+    const double bx = std::cos (kTwoPi * meas) + w * std::cos (kTwoPi * ms);
+    const double by = std::sin (kTwoPi * meas) + w * std::sin (kTwoPi * ms);
+    double residB = atan2Turns (by, bx) - (Xp - std::floor (Xp));
+    residB -= std::floor (residB + 0.5);
+    return residB * weight;
 }
 
 // The tracker can stay at rest when the record starts under the needle (or

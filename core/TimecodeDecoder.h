@@ -100,6 +100,7 @@ private:
 
     // Traktor MK2 (offset encoding)
     void mk2FrontEnd (double& l0, double& r0) noexcept;
+    double mk2Assist (double meas, double Xp, double residRaw, double weight, double residM) noexcept;
     void mk2Acquire() noexcept;
     void mk2Pulses() noexcept;
     void mk2Candidate() noexcept;
@@ -226,6 +227,21 @@ private:
     double mkLastU_ = 0.0;
     bool   mkReversed_ = false;               // the tracker reversed since the last transition
     int    mkVSign_ = 0;
+    // Tracker assist from S (issue #2, step 2 continued, stage 1): a band-pass
+    // pair on S gives its doubled angle with far less noise than a sample
+    // difference. While the S and M measurements agree (correlation gate),
+    // the S measurement is blended into the loop's phase update only;
+    // lockErr_ (quality) and the bit path keep the M-based residual.
+    double mkBpB0_ = 0.0, mkBpB2_ = 0.0, mkBpA1_ = 0.0, mkBpA2_ = 0.0; // band-pass of S (Q = 2)
+    double mkBpX1_ = 0.0, mkBpX2_ = 0.0, mkBpY1_ = 0.0, mkBpY2_ = 0.0;
+    double mkApA_ = 0.0;                      // quadrature all-pass (-90 deg at the centre frequency)
+    double mkApX1_ = 0.0, mkApY1_ = 0.0;
+    double mkBpF0_ = 0.0;                     // centre frequency the pair is tuned to
+    double mkBpI_ = 0.0, mkBpQ_ = 0.0;        // pair outputs of the current sample
+    double mkDelta_ = 0.0;                    // alignment of S's doubled angle to M's (turns)
+    bool   mkDeltaOk_ = false;
+    double mkCorr_ = 0.0;                     // smoothed agreement of the two measurements
+    double kMkDelta_ = 0.0, kMkCorr_ = 0.0;   // one-pole coefficients (set in prepare)
 
     DecoderStatus status_;
 };
