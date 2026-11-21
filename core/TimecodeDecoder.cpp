@@ -700,17 +700,21 @@ void TimecodeDecoder::anchor (double offsetNew, int valid) noexcept
         stale_ = false;
         if (std::abs (diff) > kReanchorTol * unit_)
         {
-            // MK2: the confirmation count belongs to one candidate. A
-            // reading that claims a different slip than the pending
-            // candidate restarts the count instead of completing another
+            // MK2: the confirmation count belongs to one candidate, held
+            // to its first reading: a reading that claims a different
+            // slip restarts the count instead of completing another
             // candidate's confirmation (a marginal pre-gap reading and a
             // post-gap misalignment otherwise add up to a correction
-            // neither sequence confirmed), and the completing reading
-            // must rest on bits verified after the last rejected
-            // transition, not on a verification count carried over it.
+            // neither sequence confirmed, and a candidate that drifts a
+            // step at a time would otherwise walk the reference with
+            // it). The count itself restarts at every rejected
+            // transition (onTransition), and the completing reading must
+            // rest on bits verified after that transition, not on a
+            // verification count carried over it.
             if (mk2_ && mismatch_ > 0 && std::abs (diff - mismatchRef_) > kMkCandTol)
                 mismatch_ = 0;
-            mismatchRef_ = diff;
+            if (mk2_ && mismatch_ == 0)
+                mismatchRef_ = diff;
             if (++mismatch_ >= kReanchorBits && (! mk2_ || mkAnchorPg_ >= kReanchorBits))
             {
 #if defined (VT_DEBUG) || defined (VT_DEBUG_MK)
@@ -1261,9 +1265,13 @@ void TimecodeDecoder::onTransition (int sign, double u, double rel, double absSp
 #endif
         // A rejected transition breaks the bit sequence: the verification
         // behind later readings is counted from here (mkBitsSinceBreak_),
-        // and anchor() lets a correction complete only on readings that
-        // rest on those post-break bits.
+        // and the correction candidate's confirmation count restarts too,
+        // so a correction must be confirmed by post-break readings alone
+        // (bit counts and confirmation counts are different quantities;
+        // either one carried over the break lets pre-break evidence
+        // complete a post-break correction).
         mkBitsSinceBreak_ = 0;
+        mismatch_ = 0;
         return; // not a measured run of bits (start, reversal, missed pulse)
     }
 
