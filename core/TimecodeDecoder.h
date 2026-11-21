@@ -242,6 +242,7 @@ private:
     bool   mkDeltaOk_ = false;
     double mkCorr_ = 0.0;                     // smoothed agreement of the two measurements
     double mkDMean_ = 0.0;                    // smoothed signed S-M phase difference (turns)
+    bool   mkDMeanOk_ = false;                // difference gate state (hysteresis between kMkDNowMax and kMkDNowExit)
     double kMkDelta_ = 0.0, kMkCorr_ = 0.0;   // one-pole coefficients (set in prepare)
 
     DecoderStatus status_;

@@ -79,6 +79,7 @@ constexpr double kMkRestoreSeconds = 0.02; // after a click: restore the speed t
 constexpr double kMkBpQ          = 2.0;    // band-pass pair on S for the tracker assist
 constexpr double kMkCorrGate     = 0.9;    // blend only while the S and M measurements agree this well
 constexpr double kMkDNowMax      = 0.02;   // ... and their mean phase difference stays this small (turns): a persistent offset passes the cosine gate (0.06 turns -> cos 0.93) yet pulls the tracker
+constexpr double kMkDNowExit     = 0.04;   // hysteresis on that boundary: once open, the difference gate stays open until here, so a brief crossing does not drop the blend
 constexpr double kMkAnchorMinSpeed = 0.3;  // the offset is read cleanly well below the Serato range
 constexpr double kMkAnchorMaxSpeed = 2.5;
 
@@ -212,6 +213,7 @@ void TimecodeDecoder::reset()
     mkDeltaOk_ = false;
     mkCorr_ = 0.0;
     mkDMean_ = 0.0;
+    mkDMeanOk_ = false;
     mkPulseLevel_ = kMkPulseInit;
     setTable (table_);
     status_ = DecoderStatus {};
@@ -1053,6 +1055,7 @@ double TimecodeDecoder::mk2Assist (double meas, double Xp, double residRaw, doub
     {
         mkCorr_ += kMkCorr_ * (0.0 - mkCorr_);
         mkDMean_ += kMkCorr_ * (0.0 - mkDMean_);
+        mkDMeanOk_ = false;
         return residM;
     }
     const double measS = atan2Turns (2.0 * mkBpI_ * mkBpQ_, mkBpQ_ * mkBpQ_ - mkBpI_ * mkBpI_);
@@ -1076,8 +1079,22 @@ double TimecodeDecoder::mk2Assist (double meas, double Xp, double residRaw, doub
     // The cosine gate alone passes a persistent offset (0.06 turns still
     // gives cos 0.93), and the blend then pulls the phase update towards
     // the offset for as long as it lasts. Require the mean difference
-    // itself to be small as well.
-    const bool gatePass = std::abs (mkCorr_) >= kMkCorrGate && std::abs (mkDMean_) < kMkDNowMax;
+    // itself to be small as well. The agreement must be a positive
+    // correlation: near the wrap boundary the difference can alternate
+    // around +-0.5 turns, which averages to a strong negative correlation
+    // with a near-zero mean -- an absolute-value gate would pass it and
+    // the equal-weight blend would nearly cancel. The difference gate
+    // has hysteresis (enter below kMkDNowMax, leave at kMkDNowExit) so a
+    // brief crossing does not drop the blend; signal loss still releases
+    // immediately through the amplitude path above.
+    if (mkDMeanOk_)
+    {
+        if (std::abs (mkDMean_) >= kMkDNowExit)
+            mkDMeanOk_ = false;
+    }
+    else if (std::abs (mkDMean_) < kMkDNowMax)
+        mkDMeanOk_ = true;
+    const bool gatePass = mkCorr_ >= kMkCorrGate && mkDMeanOk_;
     if (! gatePass)
         return residM;
     const double w = std::min (1.0, std::abs (speedNow_) / 0.5);
