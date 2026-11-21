@@ -78,6 +78,7 @@ constexpr double kMkQuickSeconds = 0.001;  // ... after the tracker stayed this 
 constexpr double kMkRestoreSeconds = 0.02; // after a click: restore the speed the tracker had this recently
 constexpr double kMkBpQ          = 2.0;    // band-pass pair on S for the tracker assist
 constexpr double kMkCorrGate     = 0.9;    // blend only while the S and M measurements agree this well
+constexpr double kMkDNowMax      = 0.02;   // ... and their mean phase difference stays this small (turns): a persistent offset passes the cosine gate (0.06 turns -> cos 0.93) yet pulls the tracker
 constexpr double kMkAnchorMinSpeed = 0.3;  // the offset is read cleanly well below the Serato range
 constexpr double kMkAnchorMaxSpeed = 2.5;
 
@@ -210,6 +211,7 @@ void TimecodeDecoder::reset()
     mkDelta_ = 0.0;
     mkDeltaOk_ = false;
     mkCorr_ = 0.0;
+    mkDMean_ = 0.0;
     mkPulseLevel_ = kMkPulseInit;
     setTable (table_);
     status_ = DecoderStatus {};
@@ -1050,6 +1052,7 @@ double TimecodeDecoder::mk2Assist (double meas, double Xp, double residRaw, doub
     if (! (ref > 0.0) || amp < 0.3 * ref)
     {
         mkCorr_ += kMkCorr_ * (0.0 - mkCorr_);
+        mkDMean_ += kMkCorr_ * (0.0 - mkDMean_);
         return residM;
     }
     const double measS = atan2Turns (2.0 * mkBpI_ * mkBpQ_, mkBpQ_ * mkBpQ_ - mkBpI_ * mkBpI_);
@@ -1069,7 +1072,13 @@ double TimecodeDecoder::mk2Assist (double meas, double Xp, double residRaw, doub
     double dNow = (meas - measS) - mkDelta_;
     dNow -= std::floor (dNow + 0.5);
     mkCorr_ += kMkCorr_ * (std::cos (kTwoPi * dNow) - mkCorr_);
-    if (std::abs (mkCorr_) < kMkCorrGate)
+    mkDMean_ += kMkCorr_ * (dNow - mkDMean_);
+    // The cosine gate alone passes a persistent offset (0.06 turns still
+    // gives cos 0.93), and the blend then pulls the phase update towards
+    // the offset for as long as it lasts. Require the mean difference
+    // itself to be small as well.
+    const bool gatePass = std::abs (mkCorr_) >= kMkCorrGate && std::abs (mkDMean_) < kMkDNowMax;
+    if (! gatePass)
         return residM;
     const double w = std::min (1.0, std::abs (speedNow_) / 0.5);
     if (w <= 0.0)
