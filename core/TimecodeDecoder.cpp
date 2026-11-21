@@ -1244,6 +1244,13 @@ void TimecodeDecoder::onTransition (int sign, double u, double rel, double absSp
 #ifdef VT_DEBUG_MK
         std::fprintf (stderr, "break run=%d nb=%d gap=%.3f speed=%.3f\n", int (run), nb, gap, absSpeed);
 #endif
+        // The bits after a break are a new sequence: a correction candidate
+        // must earn its consecutive confirmations from them alone. Carrying
+        // the count across the break lets a pre-break near-threshold reading
+        // and a post-break misalignment (the register still holds pre-break
+        // bits, so its implied position can sit cycles away for a bit or
+        // two) add up to a correction the new sequence never confirmed.
+        mismatch_ = 0;
         return; // not a measured run of bits (start, reversal, missed pulse)
     }
 
