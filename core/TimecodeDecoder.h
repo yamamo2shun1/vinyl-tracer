@@ -172,6 +172,7 @@ private:
     int    closedSamples_ = 0;
     double speedNow_ = 0.0;
     int    mismatch_ = 0;
+    double mismatchRef_ = 0.0; // diff claimed by the pending correction candidate
     int    reanchors_ = 0;
 
     // Fast correction while anchored: bits of the selected peak type, each
@@ -242,6 +243,8 @@ private:
     bool   mkDeltaOk_ = false;
     double mkCorr_ = 0.0;                     // smoothed agreement of the two measurements
     double mkDMean_ = 0.0;                    // smoothed signed S-M phase difference (turns)
+    int    mkBitsSinceBreak_ = 0;             // bits read since the last rejected transition
+    int    mkAnchorPg_ = 0;                   // verified bits behind the current reading, counted from after that break
     double kMkDelta_ = 0.0, kMkCorr_ = 0.0;   // one-pole coefficients (set in prepare)
 
     DecoderStatus status_;

@@ -79,6 +79,7 @@ constexpr double kMkRestoreSeconds = 0.02; // after a click: restore the speed t
 constexpr double kMkBpQ          = 2.0;    // band-pass pair on S for the tracker assist
 constexpr double kMkCorrGate     = 0.9;    // blend only while the S and M measurements agree this well
 constexpr double kMkDNowMax      = 0.02;   // ... and their mean phase difference stays this small (turns): a persistent offset passes the cosine gate (0.06 turns -> cos 0.93) yet pulls the tracker
+constexpr double kMkCandTol      = 1.0;    // cycles: a reading claiming a different slip than the pending correction candidate restarts its confirmation count
 constexpr double kMkAnchorMinSpeed = 0.3;  // the offset is read cleanly well below the Serato range
 constexpr double kMkAnchorMaxSpeed = 2.5;
 
@@ -212,6 +213,9 @@ void TimecodeDecoder::reset()
     mkDeltaOk_ = false;
     mkCorr_ = 0.0;
     mkDMean_ = 0.0;
+    mkBitsSinceBreak_ = 0;
+    mkAnchorPg_ = 0;
+    mismatchRef_ = 0.0;
     mkPulseLevel_ = kMkPulseInit;
     setTable (table_);
     status_ = DecoderStatus {};
@@ -696,7 +700,18 @@ void TimecodeDecoder::anchor (double offsetNew, int valid) noexcept
         stale_ = false;
         if (std::abs (diff) > kReanchorTol * unit_)
         {
-            if (++mismatch_ >= kReanchorBits)
+            // MK2: the confirmation count belongs to one candidate. A
+            // reading that claims a different slip than the pending
+            // candidate restarts the count instead of completing another
+            // candidate's confirmation (a marginal pre-gap reading and a
+            // post-gap misalignment otherwise add up to a correction
+            // neither sequence confirmed), and the completing reading
+            // must rest on bits verified after the last rejected
+            // transition, not on a verification count carried over it.
+            if (mk2_ && mismatch_ > 0 && std::abs (diff - mismatchRef_) > kMkCandTol)
+                mismatch_ = 0;
+            mismatchRef_ = diff;
+            if (++mismatch_ >= kReanchorBits && (! mk2_ || mkAnchorPg_ >= kReanchorBits))
             {
 #if defined (VT_DEBUG) || defined (VT_DEBUG_MK)
                 std::fprintf (stderr, "reanchor diff=%+.3f V=%+.4f valid=%d\n", diff, V_, valid);
@@ -1244,13 +1259,11 @@ void TimecodeDecoder::onTransition (int sign, double u, double rel, double absSp
 #ifdef VT_DEBUG_MK
         std::fprintf (stderr, "break run=%d nb=%d gap=%.3f speed=%.3f\n", int (run), nb, gap, absSpeed);
 #endif
-        // The bits after a break are a new sequence: a correction candidate
-        // must earn its consecutive confirmations from them alone. Carrying
-        // the count across the break lets a pre-break near-threshold reading
-        // and a post-break misalignment (the register still holds pre-break
-        // bits, so its implied position can sit cycles away for a bit or
-        // two) add up to a correction the new sequence never confirmed.
-        mismatch_ = 0;
+        // A rejected transition breaks the bit sequence: the verification
+        // behind later readings is counted from here (mkBitsSinceBreak_),
+        // and anchor() lets a correction complete only on readings that
+        // rest on those post-break bits.
+        mkBitsSinceBreak_ = 0;
         return; // not a measured run of bits (start, reversal, missed pulse)
     }
 
@@ -1262,6 +1275,8 @@ void TimecodeDecoder::onTransition (int sign, double u, double rel, double absSp
         mkPulseLevel_ += kMkPulseLearn * (std::clamp (pulse, 0.5 * mkPulseLevel_, 2.0 * mkPulseLevel_) - mkPulseLevel_);
         mkPulseLevel_ = std::clamp (mkPulseLevel_, kMkPulseInit / 3.0, kMkPulseInit * 3.0);
     }
+
+    mkBitsSinceBreak_ += nb;
 
     const LfsrTable& t = *table_;
     const int nbits = t.def().bits;
@@ -1343,6 +1358,7 @@ void TimecodeDecoder::onTransition (int sign, double u, double rel, double absSp
                           g - 0.5 * std::floor (g / 0.5));
         }
 #endif
+        mkAnchorPg_ = std::min (h.valid, mkBitsSinceBreak_);
         anchor (offsetNew, h.valid);
     }
 }
