@@ -558,27 +558,61 @@ int runEval (const std::vector<float>& L, const std::vector<float>& R, double sr
         // the signal (the bit count is only reset by a wrong bit), so a window
         // counts only with the gate open and 24 bits verified since the gate
         // last closed.
+        //
+        // The gate / bit state comes from a dedicated per-sample pass, so
+        // the result does not depend on the render block size: a block-end
+        // snapshot misses closures inside the block and credits lock to
+        // windows before it was reached. Each window takes the state at its
+        // last sample. validBits belongs to the currently selected
+        // hypothesis; when the selection changes, the verified run restarts
+        // from the new hypothesis's own count instead of adding the
+        // difference across the switch.
         std::vector<char> fresh (nw, 0);
         {
-            int newBits = 0, lastValid = 0;
-            bool wasOpen = true;
-            size_t b = 0;
-            std::vector<char> fb (blocks.size(), 0);
-            for (size_t j = 0; j < blocks.size(); ++j)
+            vt::TimecodeDecoder decS;
+            decS.prepare (sr);
+            decS.setTable (&table);
+            decS.setGateDb (gate);
+            if (haveNominal) decS.setNominalDb (nominal);
+            int newBits = 0, lastValid = 0, lastCfg = -1;
+            bool wasOpen = false;
+            for (size_t i = 0; i < N; ++i)
             {
-                const auto& bk = blocks[j];
-                if (! bk.signal) newBits = 0;
-                else if (! wasOpen) newBits = 0, lastValid = bk.validBits;
-                else if (bk.validBits >= lastValid) newBits += bk.validBits - lastValid;
-                else newBits = bk.validBits; // count reset by a wrong bit (or a new hypothesis)
-                lastValid = bk.validBits;
-                wasOpen = bk.signal;
-                fb[j] = bk.signal && bk.bitLock && newBits >= 24 ? 1 : 0;
-            }
-            for (size_t k = 0; k < nw; ++k)
-            {
-                while (b + 1 < blocks.size() && blocks[b].end <= k * w) ++b;
-                fresh[k] = fb[b];
+                decS.process (L.data() + i, R.data() + i, 1, nullptr, nullptr, nullptr, nullptr);
+                const auto& st = decS.status();
+                if (! st.signal)
+                {
+                    newBits = 0;
+                    wasOpen = false;
+                }
+                else if (! wasOpen)
+                {
+                    newBits = 0; // 24 bits must verify again after any closure
+                    lastValid = st.validBits;
+                    lastCfg = st.config;
+                    wasOpen = true;
+                }
+                else if (st.config != lastCfg)
+                {
+                    newBits = st.validBits; // the new hypothesis starts its own run
+                    lastValid = st.validBits;
+                    lastCfg = st.config;
+                }
+                else if (st.validBits >= lastValid)
+                {
+                    newBits += st.validBits - lastValid;
+                    lastValid = st.validBits;
+                }
+                else
+                {
+                    newBits = st.validBits; // count reset by a wrong bit
+                    lastValid = st.validBits;
+                }
+                if ((i + 1) % w == 0)
+                {
+                    const size_t k = (i + 1) / w - 1;
+                    if (k < nw) fresh[k] = st.signal && st.bitLock && newBits >= 24 ? 1 : 0;
+                }
             }
         }
         double motionMs = 0.0, lockedMs = 0.0;
