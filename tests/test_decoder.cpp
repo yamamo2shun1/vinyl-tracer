@@ -591,6 +591,44 @@ int runTraktorMk2 (bool quick)
                      endErr, maxErr, dec.status().reanchors);
     }
 
+    // Scope: with the bit offset removed, the scope pair traces the circle
+    // (stable radius); the raw input pair's radius swings with the offset.
+    {
+        auto th = integrateSpeed (constantSpeed (4.0, 1.0, sr), cpb * 200000.0, sr, res);
+        std::vector<float> L, R;
+        synthesize (tB, th, opt, L, R);
+        TimecodeDecoder dec;
+        dec.prepare (sr);
+        dec.setTable (&tB);
+        dec.setGateDb (-36.f);
+        std::vector<float> sL (th.size()), sR (th.size());
+        for (size_t i = 0; i < th.size(); i += 128)
+        {
+            const int n = int (std::min<size_t> (128, th.size() - i));
+            dec.process (L.data() + i, R.data() + i, n, nullptr, nullptr, nullptr,
+                         nullptr, nullptr, nullptr, sL.data() + i, sR.data() + i);
+        }
+        auto radCv = [] (const std::vector<float>& a, const std::vector<float>& b, size_t i0) {
+            double mean = 0.0;
+            for (size_t i = i0; i < a.size(); ++i) mean += std::sqrt (double (a[i]) * a[i] + double (b[i]) * b[i]);
+            mean /= double (a.size() - i0);
+            double var = 0.0;
+            for (size_t i = i0; i < a.size(); ++i)
+            {
+                const double r = std::sqrt (double (a[i]) * a[i] + double (b[i]) * b[i]);
+                var += (r - mean) * (r - mean);
+            }
+            return std::sqrt (var / double (a.size() - i0)) / mean;
+        };
+        const size_t i0 = size_t (2.0 * sr);
+        const double scopeCv = radCv (sL, sR, i0);
+        const double rawCv   = radCv (L, R, i0);
+        const bool ok = scopeCv < 0.25 && scopeCv < 0.5 * rawCv;
+        if (! ok) ++failures;
+        std::printf ("%-34s radius cv: scope %.3f | raw %.3f | %s\n", "scope (offset removed)",
+                     scopeCv, rawCv, ok ? "PASS" : "FAIL");
+    }
+
     std::printf ("\nTraktor MK2 checks: %s (%d failed)\n", failures == 0 ? "PASS" : "FAIL", failures);
     return failures == 0 ? 0 : 1;
 }

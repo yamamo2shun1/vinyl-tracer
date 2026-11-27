@@ -124,7 +124,7 @@ private:
     vt::ScratchPlayer   player;
 
     std::vector<double> posAbs, posRel, vinyl;
-    std::vector<float>  quality, speedBuf, lockErrBuf, offsetBuf;
+    std::vector<float>  quality, speedBuf, lockErrBuf, offsetBuf, scopeLBuf, scopeRBuf;
     int    currentTimecode = -1;
     int    lastMode = -1;
     double relBase = 0.0;

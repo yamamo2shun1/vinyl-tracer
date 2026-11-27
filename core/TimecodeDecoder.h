@@ -40,8 +40,8 @@ struct DecoderStatus
     bool   refLearned  = false; // refDb was measured (or restored), not the default
     int    config      = -1;    // detected channel/polarity/direction config
     int    reanchors   = 0;     // number of absolute jumps (needle drops / slips)
-    float  scopeL      = 0.f;   // calibrated, normalised scope sample
-    float  scopeR      = 0.f;
+    float  scopeL      = 0.f;   // normalised scope sample (calibrated pair;
+    float  scopeR      = 0.f;   // MK2: the input pair with the bit offset removed)
 };
 
 class TimecodeDecoder
@@ -77,9 +77,15 @@ public:
     //  centreOffset: distance of the L/R path's centre (~30 Hz low-pass) from
     //                the origin relative to its radius (1 = the path passes
     //                through the origin); -1 while the gate is closed
+    //  scopeL/R    : the pair for the scope display, normalised to the tracked
+    //                nominal level (same values as status().scopeL/R, per
+    //                sample). MK2: the input pair with the estimated bit
+    //                offset removed, so the path is the circle it is on the
+    //                record instead of that circle wandering with the bits.
     void process (const float* left, const float* right, int numSamples,
                   double* posAbs, double* posRel, float* speed, float* quality = nullptr,
-                  float* lockError = nullptr, float* centreOffset = nullptr) noexcept;
+                  float* lockError = nullptr, float* centreOffset = nullptr,
+                  float* scopeL = nullptr, float* scopeR = nullptr) noexcept;
 
     const DecoderStatus& status() const noexcept { return status_; }
 
@@ -197,6 +203,7 @@ private:
     // boundaries; after undoing the playback RIAA curve each change is a pulse.
     bool   mk2_ = false;
     double mkC_ = 0.0, mkD_ = 0.0;            // offset estimate (level, slope per sample)
+    double mkOffEst_ = 0.0;                   // offset estimate for the current sample (scope)
     bool   mkZcPos_ = false;                  // zero crossings of S -> carrier frequency
     int    mkZcCount_ = 0;
     double mkZcFreq_ = 0.0;
