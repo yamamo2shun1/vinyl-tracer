@@ -9,7 +9,7 @@ English | [日本語](INSTALL_ja.md)
 
 - Windows 10 / 11 (64-bit), or macOS 26 or later (Apple silicon / Intel)
 - A DAW that supports VST3 or Audio Units (tested on Windows 11 + Ableton Live 12 and macOS 26 / 27 + Ableton Live 12)
-- Serato CV02 / CV02.5 Control Vinyl and a turntable
+- Serato CV02 / CV02.5 Control Vinyl or Traktor Control Vinyl MK2, and a turntable
 - An audio interface that can send the turntable signal to your computer in stereo
 
 ## Windows
@@ -75,7 +75,7 @@ In the Finder, choose `Go` → `Go to Folder…` (⇧⌘G) and delete these two 
 1. Create an audio track and set its input to the channel your turntable is connected to (stereo). Set Monitor to **In**.
 2. Insert `Vinyl Tracer` on the track.
 3. Press `Load Sample...`, or drag and drop an audio file onto the window, to load a sound.
-4. Set `Timecode` to the side of the record you're using (Side A / Side B).
+4. Set `Timecode` to the record and side you're using (Serato CV02 Side A / Side B, Traktor MK2 Side A / Side B).
 5. Play the record. You're ready when a circle appears in the scope on the left and the status below reads `SIGNAL ok / CODE ok / ABS ok`.
    - Adjust the input gain on your audio interface so the input level meter stays in the green.
 6. A buffer size of 64–128 samples is recommended in Live. Latency is mostly set by the buffer size.

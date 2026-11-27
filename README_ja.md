@@ -11,7 +11,7 @@
 <img width="640" alt="v0.6.0" src="https://github.com/user-attachments/assets/4b570038-deba-41ea-b35d-149426c8a2f5" />
 
 ## Description
-Ableton Live などのDAWで、Serato CV02 / CV02.5 のコントロール・ヴァイナルを使い、プラグインに読み込んだサンプルをスクラッチするための VST3 / Audio Unit（AU）プラグインです。
+Ableton Live などのDAWで、Serato CV02 / CV02.5 や Traktor Control Vinyl MK2 のコントロール・ヴァイナルを使い、プラグインに読み込んだサンプルをスクラッチするための VST3 / Audio Unit（AU）プラグインです。
 
 - **Windows**（10 / 11、64ビット）：VST3
 - **macOS**（26 以降、Apple シリコン / Intel）：VST3 / AU（署名・公証済みのインストーラ）
@@ -32,7 +32,7 @@ DAWで曲を作りながら、「あ、このフレーズ、スクラッチし�
 
 ```
 core/      解析と再生の本体（JUCEに依存しない C++17）
-  TimecodeDef.*      Serato CV02 の定義とLFSRの位置テーブル
+  TimecodeDef.*      Serato CV02 / Traktor MK2 の定義とLFSRの位置テーブル
   TimecodeDecoder.*  タイムコード解析
   ScratchPlayer.*    位置に従ってサンプルを再生（補間＋エイリアス対策）
 plugin/    JUCE のプラグイン層（Processor / Editor）
@@ -56,6 +56,9 @@ docs/      テスト結果
    - 手で動かしているときは音量が細かく変わるので、各ビットは前後3サイクルの同じピークの平均と比べて決めます。読み誤りは10〜15％から3〜5％に減ります。照合では3ビットまでの誤りを許します。
    - 順方向0.6〜2.0x以外では、整数サイクルの分だけ補正します。針が滑って搬送波が途切れたあとは、照合の範囲を±2048サイクルに広げます。
 5. **ゲート**：ユーザー設定のしきい値と、ノイズフロア＋8dBのうち高い方を使います。それより小さい信号のときは追従を止め、ゆっくり停止させます。
+6. **Traktor Control Vinyl MK2**：搬送波は2.5kHzで、ビットはピークの大きさではなく、両チャンネルに共通のオフセット（L+R）に入っています。オフセットは2.5サイクルごとに段差を持ちます（22ビットのLFSR）。
+   - L+R からオフセットを推定して取り除き、同じ二倍角のPLLで位相を追います。ビットはそのオフセットから読みます。
+   - Serato と違い、逆回転でもビットを正しく読めるので、逆回転中（0.3〜2.5x）も絶対位置をロックします。
 
 ## 合成信号でのテスト結果
 
@@ -76,7 +79,7 @@ docs/      テスト結果
 - 位置ジッタ（100Hz以上）は16µs RMSで、1サンプル（20.8µs）未満でした。
 - 0.2ms程度の一定オフセットがあります。カートリッジとRIAAの位相によるもので、固定の遅延と同じなので聴感上の問題はありません。
 
-**注意**：上の数値は合成信号での結果です。実機の Serato 盤（CV02 / CV02.5）でも、ロックしてスクラッチ再生できることを確認しています。お使いの環境の信号は、次の「実機WAVでの確認」の方法で確かめられます。
+**注意**：上の数値は合成信号での結果です。実機の Serato 盤（CV02 / CV02.5）と Traktor Control Vinyl MK2（両面）でも、ロックしてスクラッチ再生できることを確認しています。お使いの環境の信号は、次の「実機WAVでの確認」の方法で確かめられます。
 
 ## ビルド
 
@@ -132,7 +135,7 @@ Cue の 1〜6 のボタンで、サンプルの好きな位置を6個まで登�
 
 | パラメータ | 内容 |
 |---|---|
-| Timecode | Side A / Side B |
+| Timecode | Serato CV02 Side A / Side B、Traktor MK2 Side A / Side B |
 | Mode | Absolute（針位置＝サンプル位置。針を載せ替えると追従）/ Relative（動きだけを使い、針の載せ替えは無視） |
 | RPM | 33 1/3 / 45 |
 | Threshold | ゲートのしきい値（公称レベル比、dB）。ハムやノイズが多いときは上げる |
@@ -158,11 +161,13 @@ Cue の 1〜6 のボタンで、サンプルの好きな位置を6個まで登�
 ./build/tc_analyze rec_play.wav --side A --csv play.csv
 ```
 
+Traktor Control Vinyl MK2 は `--side MK2A` / `--side MK2B` を指定します。
+
 ロックするまでの時間、ロックしている割合、補正の回数、検出した配線の設定が表示されます。CSVには1msごとのレコード位置・速度・ロック状態が出るので、グラフにすれば位置の飛びや低速での追従を確認できます。
 
 ## 未対応・次の作業
 
-- Serato CV02 以外のレコード（Traktor MK1/MK2、djay Control Vinyl）の絶対位置。Relativeモードは1kHzの直交トーンなら原理的に動きますが、回転方向の自動判定にはLFSRが必要です。
+- そのほかのレコード（Traktor MK1、djay Control Vinyl）の絶対位置。Relativeモードは1kHzの直交トーンなら原理的に動きますが、回転方向の自動判定にはLFSRが必要です。
 - タイムコードCD、45回転の実機確認
 - 高速時の音質の詰め。現在は半分のレートに落としたコピーを速度に応じてクロスフェードしてエイリアスを抑えています。
 - 長いファイルの読み込みを別スレッドにすること
@@ -179,4 +184,4 @@ Vinyl Tracer は [GNU Affero General Public License v3.0](LICENSE.md)（また�
   - [Space Grotesk](https://github.com/floriankarsten/space-grotesk)（プラグイン名）：[fonts/OFL-SpaceGrotesk.txt](fonts/OFL-SpaceGrotesk.txt)
   - [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono)（そのほかの文字）：[fonts/OFL-JetBrainsMono.txt](fonts/OFL-JetBrainsMono.txt)
 
-Serato、CV02 はSerato社の商標です。Vinyl Tracer は同社とは関係がなく、対応するタイムコード盤を示すためだけに名前を使っています。
+Serato は Serato 社の、Traktor は Native Instruments 社の商標です。Vinyl Tracer はどちらの会社とも関係がなく、対応するタイムコード盤を示すためだけに名前を使っています。
