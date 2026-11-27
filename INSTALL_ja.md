@@ -9,7 +9,7 @@
 
 - Windows 10 / 11（64ビット）、または macOS 26 以降（Apple シリコン / Intel）
 - VST3 または Audio Unit に対応した DAW（動作確認は Windows 11 ＋ Ableton Live 12、macOS 26 / 27 ＋ Ableton Live 12）
-- Serato CV02 / CV02.5 のコントロール・ヴァイナルと、ターンテーブル
+- Serato CV02 / CV02.5 または Traktor Control Vinyl MK2 のコントロール・ヴァイナルと、ターンテーブル
 - ターンテーブルの信号をステレオでパソコンに入力できるオーディオインターフェイス
 
 ## Windows
@@ -75,7 +75,7 @@ Finder で `移動` → `フォルダへ移動…`（⇧⌘G）を選び、次�
 1. オーディオトラックを作り、入力をターンテーブルがつながっているチャンネル（ステレオ）にします。モニターは **In** にします。
 2. トラックに `Vinyl Tracer` を挿します。
 3. `Load Sample...` を押すか、オーディオファイルをウィンドウにドラッグ＆ドロップしてサンプルを読み込みます。
-4. `Timecode` を使うレコードの面（Side A / Side B）に合わせます。
+4. `Timecode` を使うレコードと面（Serato CV02 Side A / Side B、Traktor MK2 Side A / Side B）に合わせます。
 5. レコードを再生します。左のスコープに円が出て、下の表示が `SIGNAL ok / CODE ok / ABS ok` になれば準備完了です。
    - 入力レベルのメーターが緑の範囲に入るように、オーディオインターフェイスの入力ゲインを調整してください。
 6. Live のバッファサイズは 64〜128 サンプルをおすすめします。遅延はほぼバッファサイズで決まります。

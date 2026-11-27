@@ -11,7 +11,7 @@ English | [日本語](README_ja.md)
 <img width="640" alt="v0.6.0" src="https://github.com/user-attachments/assets/4b570038-deba-41ea-b35d-149426c8a2f5" />
 
 ## Description
-A VST3 / Audio Unit (AU) plugin for scratching a sample loaded into the plugin with Serato CV02 / CV02.5 control vinyl, in Ableton Live and other DAWs.
+A VST3 / Audio Unit (AU) plugin for scratching a sample loaded into the plugin with Serato CV02 / CV02.5 or Traktor Control Vinyl MK2 timecode vinyl, in Ableton Live and other DAWs.
 
 - **Windows** (10 / 11, 64-bit): VST3
 - **macOS** (26 or later, Apple silicon / Intel): VST3 / AU (signed and notarized installer)
@@ -32,7 +32,7 @@ It aims to avoid, by design, three problems seen in existing plugins.
 
 ```
 core/      decoding and playback (C++17, no JUCE dependency)
-  TimecodeDef.*      Serato CV02 definition and LFSR position table
+  TimecodeDef.*      Serato CV02 / Traktor MK2 definitions and LFSR position tables
   TimecodeDecoder.*  timecode decoder
   ScratchPlayer.*    plays the sample from the position (interpolation + anti-aliasing)
 plugin/    JUCE plugin layer (Processor / Editor)
@@ -56,6 +56,9 @@ docs/      test results
    - While moving by hand the level changes quickly, so each bit is decided by comparing it with the mean of the same peak over the 3 cycles before and after. Bit errors drop from 10–15 % to 3–5 %. Matching allows up to 3 wrong bits.
    - Outside forward 0.6–2.0x, only whole cycles are corrected. After the stylus skated and the carrier was lost, the search range widens to ±2048 cycles.
 5. **Gate**: the higher of the user threshold and the noise floor + 8 dB. Below it, tracking stops and the record slows to a stop.
+6. **Traktor Control Vinyl MK2**: the carrier is 2.5 kHz, and the bits are not in the peak levels but in an offset common to both channels (L+R) that steps every 2.5 cycles (a 22-bit LFSR).
+   - The offset is estimated and removed from L+R, and the phase is tracked by the same doubled-angle PLL. The bits are read from the offset.
+   - Unlike Serato, the bits also read correctly backwards, so the absolute position locks while the record turns backwards too (0.3–2.5x).
 
 ## Test results with synthetic signals
 
@@ -76,7 +79,7 @@ The test signals model a real turntable: a cartridge (proportional to speed, inv
 - The position jitter (above 100 Hz) was 16 µs RMS, less than one sample (20.8 µs).
 - There is a constant offset of about 0.2 ms. It comes from the phase of the cartridge and RIAA, and acts like a fixed delay, so it cannot be heard.
 
-**Note**: the figures above are from synthetic signals. Locking and scratch playback have also been confirmed with real Serato records (CV02 / CV02.5). You can check the signal of your own setup as described in "Checking with a recorded WAV" below.
+**Note**: the figures above are from synthetic signals. Locking and scratch playback have also been confirmed with real records: Serato (CV02 / CV02.5) and Traktor Control Vinyl MK2 (both sides). You can check the signal of your own setup as described in "Checking with a recorded WAV" below.
 
 ## Building
 
@@ -130,7 +133,7 @@ The Cue buttons 1–6 store up to 6 positions in the sample.
 
 | Parameter | Description |
 |---|---|
-| Timecode | Side A / Side B |
+| Timecode | Serato CV02 Side A / Side B, Traktor MK2 Side A / Side B |
 | Mode | Absolute (stylus position = sample position; follows needle drops) / Relative (uses only the motion; ignores needle drops) |
 | RPM | 33 1/3 / 45 |
 | Threshold | gate threshold (relative to the nominal level, dB). Raise it when there is a lot of hum or noise |
@@ -156,11 +159,13 @@ Before trying the plugin, you can check that the decoder works with the signal o
 ./build/tc_analyze rec_play.wav --side A --csv play.csv
 ```
 
+For Traktor Control Vinyl MK2, use `--side MK2A` or `--side MK2B`.
+
 It shows the time to lock, the share of time locked, the number of corrections and the detected wiring configuration. The CSV has the record position, speed and lock state every 1 ms; plotted, it shows position jumps and low-speed tracking.
 
 ## Not yet supported / next steps
 
-- Absolute position for records other than Serato CV02 (Traktor MK1/MK2, djay Control Vinyl). Relative mode works in principle with a 1 kHz quadrature tone, but detecting the direction automatically needs the LFSR.
+- Absolute position for other records (Traktor MK1, djay Control Vinyl). Relative mode works in principle with a 1 kHz quadrature tone, but detecting the direction automatically needs the LFSR.
 - Timecode CDs, and testing 45 rpm with a real turntable
 - Fine-tuning the sound at high speed. Aliasing is currently reduced by cross-fading to half-rate copies of the sample according to the speed.
 - Loading long files on a separate thread
@@ -177,4 +182,4 @@ Vinyl Tracer is released under the [GNU Affero General Public License v3.0](LICE
   - [Space Grotesk](https://github.com/floriankarsten/space-grotesk) (plugin name): [fonts/OFL-SpaceGrotesk.txt](fonts/OFL-SpaceGrotesk.txt)
   - [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono) (all other text): [fonts/OFL-JetBrainsMono.txt](fonts/OFL-JetBrainsMono.txt)
 
-Serato and CV02 are trademarks of Serato. Vinyl Tracer is not affiliated with Serato; the names are used only to identify the supported timecode records.
+Serato is a trademark of Serato, and Traktor is a trademark of Native Instruments. Vinyl Tracer is not affiliated with either company; the names are used only to identify the supported timecode records.
