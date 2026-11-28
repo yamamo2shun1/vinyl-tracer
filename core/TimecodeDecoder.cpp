@@ -388,8 +388,12 @@ void TimecodeDecoder::processSample (float xl, float xr) noexcept
         // carries a circle displaced by the offset; the raw pair draws that
         // circle wandering with the bits, the corrected pair draws the
         // circle itself (channel balance and path shape stay as they are).
-        status_.scopeL = float ((rawL - mkOffEst_) / std::max (refAmp_, 1e-6));
-        status_.scopeR = float ((rawR - mkOffEst_) / std::max (refAmp_, 1e-6));
+        // The nominal level is measured on S = (L - R) / 2 and M = (L + R) / 2,
+        // and S^2 + M^2 = (L^2 + R^2) / 2: 1 / sqrt 2 puts the nominal circle
+        // at radius 1, as for the Serato raw pair (it sat on the 1.4 edge).
+        const double scopeNorm = 1.0 / (std::sqrt (2.0) * std::max (refAmp_, 1e-6));
+        status_.scopeL = float ((rawL - mkOffEst_) * scopeNorm);
+        status_.scopeR = float ((rawR - mkOffEst_) * scopeNorm);
     }
 
 
