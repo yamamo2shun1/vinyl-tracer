@@ -190,7 +190,7 @@ void TimecodeDecoder::reset()
     gateOpen_ = false;
     posL_ = posR_ = false;
     for (auto& r : refLevel_) r[0] = r[1] = 1.f;
-    mkC_ = mkD_ = 0.0;
+    mkC_ = mkD_ = mkOffEst_ = 0.0;
     mkZcPos_ = false;
     mkZcCount_ = 0;
     mkZcFreq_ = 0.0;
@@ -265,7 +265,8 @@ void TimecodeDecoder::updateLoopGains (double absSpeed) noexcept
 
 void TimecodeDecoder::process (const float* left, const float* right, int numSamples,
                                double* posAbs, double* posRel, float* speed, float* quality,
-                               float* lockError, float* centreOffset) noexcept
+                               float* lockError, float* centreOffset,
+                               float* scopeL, float* scopeR) noexcept
 {
     const double speedScale = (table_ != nullptr) ? sr_ * 0.5 / table_->def().resolution
                                                   : sr_ * 0.5 / 1000.0;
@@ -296,6 +297,8 @@ void TimecodeDecoder::process (const float* left, const float* right, int numSam
         if (centreOffset != nullptr)
             centreOffset[i] = gateOpen_ ? float (std::sqrt (cenL_ * cenL_ + cenR_ * cenR_) / std::max (env_, 1e-12))
                                         : -1.f;
+        if (scopeL != nullptr) scopeL[i] = status_.scopeL;
+        if (scopeR != nullptr) scopeR[i] = status_.scopeR;
     }
 
     const double rel = double (dirSign_) * X_ * 0.5 + relShift_;
@@ -324,6 +327,7 @@ void TimecodeDecoder::processSample (float xl, float xr) noexcept
     dcR_ += kdc * (double (xr) - dcR_);
     double l0 = double (xl) - dcL_;
     double r0 = double (xr) - dcR_;
+    const double rawL = l0, rawR = r0; // the input pair, before the MK2 front end replaces it
     if (mk2_)
         mk2FrontEnd (l0, r0); // -> L - R and the offset-free quadrature component
 
@@ -378,6 +382,19 @@ void TimecodeDecoder::processSample (float xl, float xr) noexcept
 
     status_.scopeL = float (l / std::max (refAmp_, 1e-6));
     status_.scopeR = float (r / std::max (refAmp_, 1e-6));
+    if (mk2_)
+    {
+        // MK2 scope: the input pair with the bit offset removed. The record
+        // carries a circle displaced by the offset; the raw pair draws that
+        // circle wandering with the bits, the corrected pair draws the
+        // circle itself (channel balance and path shape stay as they are).
+        // The nominal level is measured on S = (L - R) / 2 and M = (L + R) / 2,
+        // and S^2 + M^2 = (L^2 + R^2) / 2: 1 / sqrt 2 puts the nominal circle
+        // at radius 1, as for the Serato raw pair (it sat on the 1.4 edge).
+        const double scopeNorm = 1.0 / (std::sqrt (2.0) * std::max (refAmp_, 1e-6));
+        status_.scopeL = float ((rawL - mkOffEst_) * scopeNorm);
+        status_.scopeR = float ((rawR - mkOffEst_) * scopeNorm);
+    }
 
 
     // MK2: start the tracker on a record that is already turning (see mk2Acquire)
@@ -990,6 +1007,7 @@ void TimecodeDecoder::mk2FrontEnd (double& l0, double& r0) noexcept
     const double fn   = std::max (kMkCutMinHz, kMkCutRatio * fcar);
     const double w    = std::min (kTwoPi * fn / sr_, 0.6);
     const double cp   = mkC_ + mkD_;
+    mkOffEst_ = cp; // the scope removes this from the input pair
     const double e    = (m - mCar) - cp;
 
     mkC_ = cp + 2.0 * w * e;

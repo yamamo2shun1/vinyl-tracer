@@ -111,6 +111,8 @@ void VinylTracerProcessor::prepareToPlay (double sampleRate, int samplesPerBlock
     speedBuf.assign (n, 0.f);
     lockErrBuf.assign (n, 0.f);
     offsetBuf.assign (n, 0.f);
+    scopeLBuf.assign (n, 0.f);
+    scopeRBuf.assign (n, 0.f);
     diagFrameLen = juce::jmax (1, juce::roundToInt (sampleRate / 1000.0));
     diagCount = diagOpen = 0;
     lastMode = -1;
@@ -199,7 +201,7 @@ void VinylTracerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
 
         // 1. decode (reads the input before the output overwrites it)
         decoder.process (inL + offset, inR + offset, n, posAbs.data(), posRel.data(), speedBuf.data(), quality.data(),
-                         lockErrBuf.data(), offsetBuf.data());
+                         lockErrBuf.data(), offsetBuf.data(), scopeLBuf.data(), scopeRBuf.data());
 
         // diagnostics: 1 ms frames for the editor (dropped while it does not read them)
         for (int i = 0; i < n; ++i)
@@ -225,8 +227,12 @@ void VinylTracerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
             }
         }
 
-        // scope: raw input, normalised to the tracked nominal level
+        // scope: raw input, normalised to the tracked nominal level. Offset
+        // timecodes (MK2) draw the decoder's pair instead: the input with
+        // the bit offset removed, already normalised -- the raw pair would
+        // draw the circle wandering with the bits.
         {
+            const bool offsetTc = tables[size_t (tc)]->def().encoding == vt::TimecodeDef::Encoding::Offset;
             const float refLin = juce::Decibels::decibelsToGain (decoder.status().refDb, -120.f);
             const float norm = refLin > 1e-6f ? 1.f / refLin : 1.f;
             for (int i = 0; i < n; ++i)
@@ -237,8 +243,8 @@ void VinylTracerProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce:
                 scopeFifo.prepareToWrite (1, s1, n1, s2, n2);
                 if (n1 + n2 == 0) break;
                 const int idx = n1 > 0 ? s1 : s2;
-                scopeData[size_t (idx * 2)]     = inL[offset + i] * norm;
-                scopeData[size_t (idx * 2 + 1)] = inR[offset + i] * norm;
+                scopeData[size_t (idx * 2)]     = offsetTc ? scopeLBuf[size_t (i)] : inL[offset + i] * norm;
+                scopeData[size_t (idx * 2 + 1)] = offsetTc ? scopeRBuf[size_t (i)] : inR[offset + i] * norm;
                 scopeFifo.finishedWrite (1);
             }
         }
